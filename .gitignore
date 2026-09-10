@@ -1,0 +1,50 @@
+# ---- dependencies / build output ----
+node_modules/
+dist/
+build/
+coverage/
+
+# ---- ความลับ ----
+# .env ของแต่ละเครื่องต่างกัน และมี GOOGLE_CLIENT_SECRET กับรหัส admin อยู่ข้างใน
+.env
+.env.*
+!.env.example
+# ยกเว้นตัวนี้โดยตั้งใจ — ไม่ใช่ความลับของใคร แต่เป็นค่าที่ e2e ต้องเหมือนกันทุกเครื่อง
+# (ชี้ไปที่ API/ฐานข้อมูลของ e2e) · ถ้า ignore ไว้ คนที่ clone ใหม่จะรัน e2e ไม่ได้
+!apps/web/.env.production.local
+
+# ---- Next.js ----
+apps/web/.next/
+apps/web/next-env.d.ts
+*.tsbuildinfo
+# `next dev` เรียก pnpm ไปลง @types/node ที่ขาด แล้วทิ้ง lockfile ตัวที่สองไว้ใน
+# workspace ที่ใช้ bun
+apps/web/pnpm-lock.yaml
+
+# ---- Prisma / API ----
+apps/api/prisma/generated/
+apps/api/logs/
+apps/api/uploads/
+
+# ---- e2e ----
+# ผลของการรันแต่ละครั้ง สร้างใหม่ได้เสมอ
+e2e/.artifacts/
+e2e/.output/
+e2e/.report/
+e2e/.uploads/
+e2e/screenshots/
+
+# ---- สคริปต์ทิ้งขว้าง ----
+# ไฟล์ debug ชั่วคราว · เทสจริงอยู่ใน test/ และ commit ตามปกติ
+apps/*/_*.ts
+
+# ---- logs / OS ----
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# ---- editor ----
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

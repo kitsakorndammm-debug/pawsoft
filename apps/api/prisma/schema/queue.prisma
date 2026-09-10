@@ -1,0 +1,384 @@
+// การจอง กับ คิวหน้างาน — **สองเรื่อง สองตาราง**
+//
+//   `Appointment`  การจองล่วงหน้า — ลูกค้าจองเอง หรือพนักงานรับโทรศัพท์แล้วจองให้
+//   `Visit`        การมาถึงคลินิกจริงหนึ่งครั้ง — **นี่คือคิว**
+//
+// (ผู้ใช้ตัดสิน 2026-09-01: "ข้อ 1 และ 2 จะยังไม่ใช่คิวจริง เพราะยังไงพอมาหน้างานก็จะ
+// ต้องจัดคิวจริงใหม่ตามการรักษาอยู่แล้ว")
+//
+// **ทำไมไม่ใช่ตารางเดียวที่มี `isConfirmed`**
+//
+// เพราะทุก query ของทุกจอจะต้องจำใส่เงื่อนไขเอง · จอคิวหมอถามว่า "ใครอยู่ในคลินิก
+// ตอนนี้" ส่วนจอจองถามว่า "พรุ่งนี้เช้ามีคนจองกี่ราย" — สองคำถามนี้ไม่มีวันตอบด้วย
+// where เดียวกัน และวันที่ลืมใส่ครั้งเดียว การจองของอาทิตย์หน้าจะโผล่ในคิววันนี้
+//
+// อีกอย่างคือ **การจองหนึ่งใบกลายเป็น visit ได้ ไม่กลายก็ได้** (ลูกค้าไม่มา) และ
+// **visit เกิดได้โดยไม่มีการจอง** (walk-in · ฉุกเฉิน) · ความสัมพันธ์คือ 0..1 ต่อ 0..1
+// ซึ่งเป็นรูปของสองตารางที่ชี้หากัน ไม่ใช่ตารางเดียวที่มีธง
+
+/// ช่วงเวลาที่จองได้ — **4 ช่วง** (ผู้ใช้กำหนด 2026-09-01: เช้า 2 · บ่าย-เย็น 2)
+///
+/// **ไม่ใช่ `startAt`/`endAt` เป็นนาที** — การรักษาคาดเวลาเป๊ะ ๆ ไม่ได้ และเคสฉุกเฉิน
+/// แทรกได้ตลอด · ให้ลูกค้าจอง 10:30 คือการสัญญาเวลาที่คลินิกรักษาไม่ได้ แล้วทุกคน
+/// ที่มาตามเวลาจะรู้สึกว่าระบบโกหก
+///
+/// เวลาจริงของแต่ละช่วงเป็นค่าที่คลินิกตั้งเอง อยู่ในโค้ดฝั่งแสดงผล ไม่ใช่ในฐาน —
+/// ฐานรู้แค่ว่า "ช่วงที่หนึ่งของเช้า" ไม่ใช่ "09:00-10:30" เพราะเวลาเปิดคลินิกเปลี่ยนได้
+/// โดยที่การจองเก่าไม่ควรเปลี่ยนความหมายตาม
+enum AppointmentSlot {
+  MORNING_1
+  MORNING_2
+  AFTERNOON_1
+  AFTERNOON_2
+
+  @@map("appointment_slot")
+}
+
+/// ใครเป็นคนจอง — **ไม่ใช่ "ช่องทางติดต่อ" แต่คือ "ใครกด"**
+///
+/// ต่างกันที่ความน่าเชื่อถือของข้อมูล: `ONLINE` ลูกค้าพิมพ์เอง · `PHONE` พนักงานพิมพ์
+/// ตามที่ได้ยินทางสาย ซึ่งชื่อสัตว์สะกดผิดได้บ่อยกว่ามาก
+enum AppointmentSource {
+  /// ทาง 1 — ลูกค้าล็อกอิน Google แล้วจองเอง
+  ONLINE
+  /// ทาง 2 — โทรเข้ามา พนักงานจองให้
+  PHONE
+
+  @@map("appointment_source")
+}
+
+/// สถานะของการจอง
+///
+/// **`ARRIVED` ไม่ใช่จุดจบที่ดี** — มันแปลว่าการจองใบนี้ถูกใช้ไปแล้ว โดยมี `Visit`
+/// เป็นตัวรับช่วง · หลังจุดนั้นความจริงทั้งหมดอยู่ที่ `Visit` ไม่ใช่ที่นี่
+enum AppointmentStatus {
+  /// **ลูกค้าจองออนไลน์เอง ยังไม่มีพนักงานรับรู้** — ยังไม่ใช่การจองที่คลินิกรับปาก
+  ///
+  /// (ผู้ใช้กำหนด 2026-09-01: "จะยังไม่คอนเฟิร์ม จะต้องให้พนักงานโทรมาคุยรายละเอียด
+  /// เพิ่ม และพนักงานจะเป็นคนคอนเฟิร์มคิวเอง ให้ลูกค้าจัดคิวจองเองหัวปวดแน่")
+  ///
+  /// **แยกจาก `BOOKED` เพราะเป็นคนละคำสัญญา** · `BOOKED` แปลว่าคลินิกจัดที่ให้แล้ว ·
+  /// รวมสองอย่างนี้เป็นสถานะเดียวแปลว่าจอคิวของคลินิกจะเต็มไปด้วยใบที่ยังไม่มีใคร
+  /// ตกลงด้วย แล้วพนักงานแยกไม่ออกว่าใบไหนโทรไปแล้ว
+  PENDING
+  /// จองไว้ ยังไม่ถึงวัน — **พนักงานยืนยันแล้ว**
+  BOOKED
+  /// ลูกค้ามาถึงแล้ว — มี `Visit` ที่ชี้กลับมาที่ใบนี้
+  ARRIVED
+  /// ยกเลิกโดยลูกค้าหรือคลินิก — `cancelReason` บอกว่าใคร
+  CANCELLED
+  /// ถึงเวลาแล้วไม่มา — **ต่างจาก `CANCELLED`** เพราะไม่มีใครบอกล่วงหน้า
+  ///
+  /// แยกไว้เพราะเป็นตัวเลขที่คลินิกต้องรู้ (ลูกค้าที่ไม่มาบ่อยควรถูกโทรยืนยันก่อน) ·
+  /// รวมกับ `CANCELLED` แปลว่าตอบคำถามนี้ไม่ได้อีก
+  NO_SHOW
+
+  @@map("appointment_status")
+}
+
+/// การจองล่วงหน้าหนึ่งใบ — **ยังไม่ใช่คิว**
+model Appointment {
+  id BigInt @id @default(autoincrement())
+
+  /// วันที่จอง — `@db.Date` ไม่ใช่ timestamp
+  ///
+  /// การจองเป็นของ "วันที่" ไม่ใช่ "ขณะเวลา" · เก็บเป็น timestamp แปลว่าต้องตอบว่า
+  /// กี่โมง ซึ่งไม่มีคำตอบ และ timezone จะทำให้การจองวันที่ 1 กลายเป็นวันที่ 2
+  bookedOn DateTime        @map("booked_on") @db.Date
+  slot     AppointmentSlot
+
+  /// พนักงานกดยืนยันเมื่อไหร่ — `null` แปลว่ายังเป็น `PENDING` อยู่
+  ///
+  /// **ไม่ใช่ข้อมูลซ้ำกับ `status`** · `status` บอกว่าตอนนี้อยู่ตรงไหน · ที่นี่บอกว่า
+  /// ใบนี้เคยผ่านการยืนยันตอนไหน ซึ่งยังต้องตอบได้หลังใบเดินไป `ARRIVED` แล้ว
+  confirmedAt DateTime? @map("confirmed_at")
+  confirmedBy BigInt?   @map("confirmed_by")
+
+  /// **ผู้จองบังคับ · สัตว์ไม่บังคับ**
+  ///
+  /// คนโทรมาบอกว่า "ขอจองพรุ่งนี้เช้าให้หมาที่บ้าน" โดยที่หมาตัวนั้นยังไม่เคยมา
+  /// คลินิกและยังไม่มีแถวใน `pet` · บังคับเลือกสัตว์แปลว่าพนักงานต้องกรอกทะเบียนสัตว์
+  /// ให้จบขณะที่ลูกค้ายังถือสายรออยู่
+  ownerId BigInt @map("owner_id")
+  owner   Owner  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+
+  petId BigInt? @map("pet_id")
+  pet   Pet?    @relation(fields: [petId], references: [id], onDelete: Restrict)
+
+  /// ชื่อสัตว์ที่ลูกค้าบอกมา — ใช้เมื่อ `petId` ยังว่าง
+  ///
+  /// ฐานบังคับว่าต้องมีอย่างน้อยหนึ่งใน `petId` / `petNameText` — ดู `06-queue.sql` ·
+  /// การจองที่ไม่รู้ว่าจองให้ตัวไหนคือใบที่พนักงานหน้างานอ่านแล้วทำอะไรไม่ได้
+  petNameText String? @map("pet_name_text") @db.VarChar(200)
+
+  source AppointmentSource
+  status AppointmentStatus @default(BOOKED)
+
+  /// อาการที่เล่ามาตอนจอง — ใช้เตรียมของและกะเวลาคร่าว ๆ
+  reason String? @db.VarChar(1000)
+
+  /// เหตุผลที่ยกเลิก — คู่กับ `status = CANCELLED` บังคับด้วย CHECK
+  cancelReason String? @map("cancel_reason") @db.VarChar(500)
+
+  /// visit ที่เกิดจากใบจองนี้ — **`@unique` เพราะจองหนึ่งใบใช้ได้ครั้งเดียว**
+  ///
+  /// ฝั่งที่ถือ FK คือ `Visit` (`Visit.appointmentId`) เพราะ visit เกิดทีหลังเสมอ ·
+  /// ที่นี่เป็นแค่ขาอ่านกลับ
+  visit Visit?
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  /// **nullable** — การจองทาง `ONLINE` ลูกค้าเป็นคนสร้าง ไม่มี `user.id` ให้ใส่
+  ///
+  /// ทุกตารางอื่นในระบบนี้ `createdBy` บังคับ เพราะมีแต่พนักงานที่สร้างของได้ ·
+  /// ตารางนี้เป็นตารางแรกที่คนนอกเขียนได้ · `createdByOwnerAccountId` เก็บว่าเป็น
+  /// บัญชีไหน และ CHECK บังคับว่าต้องมีฝั่งใดฝั่งหนึ่ง ไม่ใช่ทั้งคู่หรือไม่มีเลย
+  createdBy BigInt?   @map("created_by")
+
+  createdByOwnerAccountId BigInt?          @map("created_by_owner_account_id")
+  createdByOwnerAccount   PetOwnerAccount? @relation(fields: [createdByOwnerAccountId], references: [id], onDelete: Restrict)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy BigInt?  @map("updated_by")
+
+  /// จอ "การจองของวันนี้/พรุ่งนี้" เรียงตามช่วง — เส้นทางที่ใช้บ่อยที่สุด
+  @@index([bookedOn, slot, status])
+  @@index([ownerId])
+  @@index([petId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("appointment")
+}
+
+/// ระดับความเร่งด่วน — **enum ไม่ใช่ `isEmergency Boolean`**
+///
+/// (ผู้ใช้กำหนด 2026-09-01: "อย่าลืมทำเผื่อคิวเคสแดงฉุกเฉินด้วย")
+///
+/// boolean พังทันทีที่มีเคส "ด่วนแต่ไม่ถึงขั้นแดง" ซึ่งมีจริงและมีบ่อย · ตอนนั้นจะงอก
+/// boolean ตัวที่สอง แล้วสองตัวจะขัดกันเองได้ (`isEmergency && !isUrgent` แปลว่าอะไร)
+///
+/// เรียงจากด่วนที่สุดไปน้อยที่สุด และ **การเรียงคิวใช้ลำดับนี้ก่อนเวลามาถึงเสมอ**
+enum TriageLevel {
+  /// แดง — ถึงชีวิต เข้าก่อนทุกคนทันที
+  EMERGENCY
+  /// เหลือง — ต้องเจอหมอเร็ว แต่รอได้
+  URGENT
+  /// เขียว — ตามคิวปกติ
+  NORMAL
+
+  @@map("triage_level")
+}
+
+/// สถานะของการมาหนึ่งครั้ง
+enum VisitStatus {
+  /// ลงทะเบียนแล้ว รออยู่ในคลินิก — **นี่คือแถวที่แสดงบนจอคิว**
+  WAITING
+  /// เรียกแล้ว กำลังตรวจ
+  IN_PROGRESS
+  /// ตรวจเสร็จ รอชำระเงิน
+  ///
+  /// แยกจาก `DONE` เพราะเป็นคนละคนที่ทำ (หมอจบตรงนี้ · แคชเชียร์จบอีกที) และคลินิก
+  /// ต้องรู้ว่ามีกี่รายค้างอยู่ตรงเคาน์เตอร์
+  AWAITING_PAYMENT
+  /// จบครบแล้ว
+  DONE
+  /// ลูกค้ากลับก่อนโดยไม่ได้ตรวจ — รอนานเกิน หรือเปลี่ยนใจ
+  ///
+  /// **ไม่ลบแถว** เพราะเวลาที่เขารอคือข้อมูลที่คลินิกต้องเห็น
+  LEFT
+  /// ยกเลิก — ลงทะเบียนผิดคน กรอกซ้ำ
+  CANCELLED
+
+  @@map("visit_status")
+}
+
+/// การมาถึงคลินิกหนึ่งครั้ง — **นี่คือคิวจริง**
+///
+/// เกิดได้ 3 ทาง และทั้งสามทางจบที่ตารางนี้เหมือนกัน:
+///
+///   จองออนไลน์ → มาถึง → check-in     `appointmentId` มีค่า
+///   โทรจอง     → มาถึง → check-in     `appointmentId` มีค่า
+///   เดินเข้ามา → check-in เลย          `appointmentId` เป็น null
+///
+/// **การจองไม่กลายเป็นแถวนี้เอง** — ต้องมีคนกดที่เคาน์เตอร์ เพราะการจองที่ลูกค้าไม่มา
+/// ก็มี และคิวที่มีคนไม่อยู่จริงคือคิวที่หมอเรียกแล้วเงียบ
+model Visit {
+  id BigInt @id @default(autoincrement())
+
+  /// เลขคิวของวัน — **รีเซ็ตทุกวัน ห้ามซ้ำภายในวันเดียวกัน**
+  ///
+  /// ออกตอน check-in เรียงตามลำดับมาถึง · เป็นเลขที่ลูกค้าเห็นและได้ยินตอนเรียก
+  ///
+  /// **ไม่ใช่ลำดับที่จะได้เจอหมอ** — เคสแดงที่มาทีหลังได้เจอก่อน โดยที่เลขคิวไม่เปลี่ยน ·
+  /// เปลี่ยนเลขคิวย้อนหลังแปลว่าลูกค้าที่ถือบัตรเลข 12 อยู่จู่ ๆ กลายเป็นเลข 13
+  /// ลำดับเรียกจริงคำนวณจาก `triage` + `arrivedAt` ไม่ได้เก็บเป็นคอลัมน์
+  queueNumber Int @map("queue_number")
+
+  /// วันของคิว — `@db.Date` · คู่กับ `queueNumber` เป็น partial unique ต่อวัน
+  ///
+  /// แยกจาก `arrivedAt` ที่เป็น timestamp เพราะคลินิกที่เปิดข้ามเที่ยงคืนต้องตัดสินเอง
+  /// ว่าคนที่มาตอนตีหนึ่งเป็นคิวของวันไหน — คำนวณจาก timestamp ตรง ๆ จะได้คำตอบที่ผิด
+  queueDate DateTime @map("queue_date") @db.Date
+
+  triage TriageLevel @default(NORMAL)
+  status VisitStatus @default(WAITING)
+
+  /// **เจ้าของและสัตว์ไม่บังคับทั้งคู่** — และนี่คือเหตุผลที่สำคัญที่สุดของตารางนี้
+  ///
+  /// (ผู้ใช้กำหนด 2026-09-01: "ข้อ 3 รองรับตัวนี้แล้วสามารถเชื่อมงานกับสัตว์และผู้ใช้
+  /// ในระบบได้ภายหลัง")
+  ///
+  /// สัตว์ที่กำลังจะตายถูกอุ้มเข้ามาโดยคนที่ไม่ใช่เจ้าของ · ถ้าฐานบังคับว่าต้องเลือก
+  /// `petId` ก่อนถึงจะเปิดคิวได้ พนักงานจะต้องกรอกทะเบียนสัตว์ให้เสร็จก่อนหมอจะเริ่ม
+  /// รักษาได้ — **ระบบต้องไม่ยืนขวางตรงนั้น**
+  ///
+  /// แล้วค่อยผูกทีหลังเมื่อรู้ว่าเป็นใคร (`linkVisit`) โดยที่ประวัติการรักษาที่บันทึก
+  /// ไปแล้วยังอยู่ที่แถวเดิม
+  ownerId BigInt? @map("owner_id")
+  owner   Owner?  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+
+  petId BigInt? @map("pet_id")
+  pet   Pet?    @relation(fields: [petId], references: [id], onDelete: Restrict)
+
+  /// ชื่อสัตว์ที่เขียนหน้างาน — ใช้เมื่อ `petId` ยังว่าง
+  ///
+  /// ฐานบังคับว่าต้องมี `petId` หรือ `walkInPetName` อย่างน้อยหนึ่ง — คิวที่ไม่มีชื่อ
+  /// อะไรเลยคือแถวที่เรียกไม่ได้
+  walkInPetName String? @map("walk_in_pet_name") @db.VarChar(200)
+
+  /// ชื่อและเบอร์ของคนที่พามา — ใช้เมื่อ `ownerId` ยังว่าง
+  walkInOwnerName  String? @map("walk_in_owner_name") @db.VarChar(200)
+  walkInOwnerPhone String? @map("walk_in_owner_phone") @db.VarChar(30)
+
+  /// ใบจองที่ลูกค้าถือมา — `null` = walk-in
+  ///
+  /// `@unique` เพราะจองหนึ่งใบแลกได้คิวเดียว · ไม่งั้นกด check-in สองครั้งจะได้สองคิว
+  /// ที่รอเจอหมอทั้งคู่
+  appointmentId BigInt?      @unique @map("appointment_id")
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+
+  /// อาการที่แจ้งตอนลงทะเบียน — คำของเจ้าของ ไม่ใช่คำวินิจฉัย
+  symptom String? @db.VarChar(2000)
+
+  /// น้ำหนักที่ชั่งได้ครั้งนี้ — **แหล่งความจริงของใบสั่งยาครั้งนี้**
+  ///
+  /// ขนาดยาคิดจากน้ำหนัก ณ วันที่จ่าย · `Pet.weightKg` เป็นแค่ค่าล่าสุดไว้โชว์ และ
+  /// จะเปลี่ยนไปเมื่อสัตว์มาครั้งหน้า ซึ่งไม่ควรทำให้ใบสั่งยาเก่าอ่านได้คนละแบบ
+  weightKg Decimal? @map("weight_kg") @db.Decimal(6, 2)
+
+  /// สัตวแพทย์ที่รับเคส — `null` ตอนยังรออยู่
+  vetEmployeeId BigInt?   @map("vet_employee_id")
+  vetEmployee   Employee? @relation(fields: [vetEmployeeId], references: [id], onDelete: Restrict)
+
+  /// เวลามาถึง — ใช้เรียงคิวภายในระดับ triage เดียวกัน
+  arrivedAt DateTime  @default(now()) @map("arrived_at")
+  /// เวลาที่เรียกเข้าตรวจ — คู่กับ `status` ที่เดินผ่าน `IN_PROGRESS` แล้ว
+  calledAt  DateTime? @map("called_at")
+  doneAt    DateTime? @map("done_at")
+
+  /// วินิจฉัย — คำของหมอ
+  diagnosis String? @db.VarChar(2000)
+  note      String? @db.VarChar(2000)
+
+  services VisitService[]
+  drugs    VisitDrug[]
+
+  /**
+   * ใบเสร็จของคิวนี้ — **เป็นลิสต์เพราะใบที่ยกเลิกยังอยู่**
+   *
+   * ในทางธุรกิจคือหนึ่งคิวหนึ่งใบ · แต่ใบที่ออกผิดแล้วยกเลิก (`VOID`) ยังต้องเก็บไว้
+   * เป็นประวัติ แล้วออกใบใหม่ให้คิวเดิมได้ · ฐานบังคับด้วย partial unique ที่ไม่นับ
+   * ใบ `VOID` — ดู `invoice_visit_live_key` ใน `07-payment.sql`
+   *
+   * โค้ดที่อยากได้ "ใบที่ยังมีผล" ใช้ `findInvoiceByVisit` ซึ่งกรอง `VOID` ออกให้แล้ว
+   */
+  invoices Invoice[]
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  /// จอคิววันนี้ — where `queue_date = today AND status IN (WAITING, IN_PROGRESS)`
+  @@index([queueDate, status, triage])
+  @@index([petId])
+  @@index([ownerId])
+  @@index([vetEmployeeId])
+  @@index([deletedAt])
+  @@map("visit")
+}
+
+/// รายการรักษาที่ทำในการมาครั้งนี้
+///
+/// **ราคาคัดลอกมา ไม่ได้ชี้ไปที่ `service_item.price`**
+///
+/// ราคาในตารางตั้งต้นคือราคาวันนี้ · ใบเสร็จของเดือนที่แล้วต้องอ่านได้เป็นเงินที่เก็บ
+/// จริงตอนนั้น · ชี้ไปที่ต้นทางแปลว่าวันที่ขึ้นราคา ใบเสร็จเก่าทุกใบเปลี่ยนยอดตาม
+/// และงบการเงินที่ปิดไปแล้วจะไม่ตรงกับตัวเอง
+model VisitService {
+  id BigInt @id @default(autoincrement())
+
+  visitId BigInt @map("visit_id")
+  visit   Visit  @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  /// รายการที่เลือกมา — `onDelete: Restrict` กันไม่ให้ลบรายการที่เคยใช้ไปแล้ว
+  serviceItemId BigInt      @map("service_item_id")
+  serviceItem   ServiceItem @relation(fields: [serviceItemId], references: [id], onDelete: Restrict)
+
+  /// ชื่อ ณ ตอนนั้น — คัดลอกมาด้วยเหตุผลเดียวกับราคา
+  nameSnapshot String @map("name_snapshot") @db.VarChar(200)
+
+  quantity  Int     @default(1)
+  unitPrice Decimal @map("unit_price") @db.Decimal(12, 2)
+
+  note String? @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy BigInt   @map("created_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy BigInt   @map("updated_by")
+
+  @@index([visitId])
+  @@index([serviceItemId])
+  @@map("visit_service")
+}
+
+/// ยาที่จ่ายในการมาครั้งนี้ — คัดลอกราคาเหมือน `VisitService`
+model VisitDrug {
+  id BigInt @id @default(autoincrement())
+
+  visitId BigInt @map("visit_id")
+  visit   Visit  @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  drugId BigInt @map("drug_id")
+  drug   Drug   @relation(fields: [drugId], references: [id], onDelete: Restrict)
+
+  nameSnapshot String  @map("name_snapshot") @db.VarChar(200)
+  unitSnapshot String? @map("unit_snapshot") @db.VarChar(30)
+
+  quantity  Decimal @db.Decimal(10, 2)
+  unitPrice Decimal @map("unit_price") @db.Decimal(12, 2)
+
+  /// วิธีใช้ที่หมอสั่งครั้งนี้
+  ///
+  /// ขนาดที่สั่งให้สัตว์ตัวนี้ตามน้ำหนักตัวนี้ — เป็นข้อความที่พิมพ์ลงซองยา
+  ///
+  /// **ทะเบียนยาไม่มีช่องวิธีใช้ทั่วไป** (ผู้ใช้ตัดสิน 2026-09-01) · วิธีใช้ขึ้นกับ
+  /// สัตว์และน้ำหนักของครั้งนั้น การเก็บค่ากลางไว้ที่ตัวยาจึงเป็นค่าที่ไม่มีใครใช้จริง
+  dosage String? @db.VarChar(500)
+
+  /// แถวสต็อกที่เกิดจากการจ่าย/ลบรายการนี้ — ดู `DrugStockMovement`
+  stockMovements DrugStockMovement[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy BigInt   @map("created_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy BigInt   @map("updated_by")
+
+  @@index([visitId])
+  @@index([drugId])
+  @@map("visit_drug")
+}

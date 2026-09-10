@@ -1,0 +1,24 @@
+# ฐานข้อมูลสำหรับเครื่อง dev — API รันบนเครื่องจริงผ่าน `bun dev` ไม่ได้อยู่ใน container
+#
+# **อย่าลง Postgres ลงเครื่อง Windows ตรง ๆ** — เวอร์ชันต้องตรงกับ production เป๊ะ ๆ
+# และตัวติดตั้งบน Windows คือของคนละสายกับที่ production ใช้
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: pawsoft-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pawsoft
+      TZ: Asia/Bangkok
+    ports: ['5432:5432']
+    volumes: [pawsoft-pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d pawsoft']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pawsoft-pgdata:

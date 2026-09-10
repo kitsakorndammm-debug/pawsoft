@@ -1,0 +1,18 @@
+// ตัวตั้งค่าของสคีมา — ไม่มี model อยู่ในไฟล์นี้
+//
+// สคีมาแยกเป็นไฟล์ละโดเมน (`auth.prisma` `system.prisma`) ไฟล์นี้ถือเฉพาะ generator
+// กับ datasource ที่ทั้งชุดใช้ร่วมกัน
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated"
+}
+
+// **ไม่มี `url` ที่นี่** — Prisma 7 ย้ายไปอยู่ `prisma.config.ts` แทน
+//
+// ตอนรัน CLI (`db push` · `studio`) การต่อฐานมาจากไฟล์นั้น · ตอนรันโปรแกรมจริง
+// มาจาก adapter ที่ส่งให้ `new PrismaClient()` ใน `kit/db.ts` · ที่นี่เหลือแค่การบอกว่า
+// ฐานเป็นชนิดไหน ซึ่งเป็นสิ่งที่ตัวสร้าง SQL ต้องรู้
+datasource db {
+  provider = "postgresql"
+}

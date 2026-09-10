@@ -1,0 +1,155 @@
+// โครงสร้างองค์กร — แผนก ตำแหน่ง และคนที่ทำงานอยู่
+//
+// **ไม่มีตาราง `branch` และ `service_area`** (ผู้ใช้ตัดสิน 2026-08-31) — คลินิกมีสาขาเดียว ·
+// ตารางที่มีแถวเดียวตลอดกาลคือช่องที่ทุกฟอร์มต้องกรอกเพื่อตอบคำถามที่ไม่มีใครถาม ·
+// วันที่เปิดสาขาที่สอง ค่อยเพิ่ม `branchId` เข้ามาเป็น nullable แล้วเติมทีหลัง
+
+/// แผนก — กลุ่มงานในคลินิก
+///
+/// **ผู้ใช้ลากจัดลำดับเอง** จึงมี `sortOrder` และตามมาด้วยข้อผูกมัดสองข้อ:
+/// ตารางนี้**ห้ามแบ่งหน้า** (ลากข้ามหน้าไม่ได้) และต้องมี `PATCH /:id/move`
+///
+/// **ลบแผนกที่ยังมีตำแหน่งสังกัดอยู่ไม่ได้** — ตำแหน่งที่ยังไม่ถูกลบ ต้องถูกย้ายออกก่อน ·
+/// ตำแหน่งที่ถูกลบไปแล้วให้ล้าง `departmentId` เป็น null ในทรานแซกชันเดียวกัน · พนักงาน
+/// ก็เช่นกัน
+model Department {
+  id   BigInt @id @default(autoincrement())
+  name String @db.VarChar(200)
+
+  /// ตำแหน่งในลิสต์ที่ผู้ใช้ลากเรียงเอง — 0 คือบนสุด
+  ///
+  /// **`null` แปลว่าแถวนี้ถูกลบไปแล้ว** · แถวที่ยังอยู่ถือเลข 0 ขึ้นไปเสมอ · ตอน soft
+  /// delete ให้ตั้งเป็น null เพื่อคืนเลขนั้นให้แถวที่ยังอยู่ในลิสต์ ไม่งั้นจะมีช่องว่าง
+  /// ที่ไม่มีอะไรอยู่ตรงกลางลำดับตลอดไป
+  sortOrder Int? @map("sort_order")
+
+  positions Position[]
+  employees Employee[]
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@index([sortOrder])
+  @@index([deletedAt])
+  @@map("department")
+}
+
+/// ตำแหน่งงาน
+///
+/// **ชื่อห้ามซ้ำทั้งตาราง ไม่ใช่ห้ามซ้ำต่อแผนก** — "ผู้ช่วย" มีแถวเดียวที่ทุกแผนกใช้ร่วมกัน
+/// ไม่ใช่แถวละแผนก · แถวซ้ำชื่อคือรายการเลือกที่คนกรอกฟอร์มแยกไม่ออกว่าต่างกันตรงไหน
+///
+/// `departmentId` ว่างได้ แปลว่า **ไม่สังกัดแผนกไหนเลย** ไม่ใช่ "ใช้ได้ทุกแผนก" ·
+/// ผู้อำนวยการคลินิกเป็นตัวอย่าง · ความต่างนี้สำคัญเพราะ service บังคับว่าพนักงานที่อยู่
+/// แผนก A เลือกได้เฉพาะตำแหน่งของแผนก A และพนักงานที่ไม่มีแผนกเลือกได้เฉพาะตำแหน่งที่
+/// ไม่สังกัดแผนก — ดู `requirePositionInDepartment`
+model Position {
+  id   BigInt @id @default(autoincrement())
+  name String @db.VarChar(200)
+
+  sortOrder Int? @map("sort_order")
+
+  departmentId BigInt?     @map("department_id")
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  employees Employee[]
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@index([departmentId])
+  @@index([sortOrder])
+  @@index([deletedAt])
+  @@map("position")
+}
+
+/// สภาพการทำงานของพนักงาน
+///
+/// **คนละเรื่องกับการลบพนักงาน** · พ้นสภาพคือคนที่เคยทำงานที่นี่และประวัติยังต้องอยู่ ·
+/// ลบคือแถวที่สร้างผิดตั้งแต่แรก
+enum WorkStatus {
+  /// ทำงานอยู่
+  ACTIVE
+
+  /// พ้นสภาพ — บัญชีถูกระงับตามทันที เข้าระบบไม่ได้
+  TERMINATED
+
+  @@map("work_status")
+}
+
+/// พนักงานคลินิก
+///
+/// **ไม่ใช่ทะเบียนธรรมดา** และต่างจาก `department`/`position` สี่ข้อ: ตัวระบุคือ `code`
+/// ไม่ใช่ `name` · ชื่อแยกเป็นสามช่อง · มี FK สองตัว · และ**ไม่มี `sortOrder`** เพราะ
+/// ไม่มีใครลากเรียงคน · ผลคือไม่มี `move` และ `list` แบ่งหน้าได้
+///
+/// **ลบแล้วบัญชีถูกระงับตามในทรานแซกชันเดียวกัน** — คนที่ไม่ได้ทำงานที่นี่แล้วต้องเข้า
+/// ระบบไม่ได้ทันที ไม่ใช่รอให้ใครนึกได้
+model Employee {
+  id BigInt @id @default(autoincrement())
+
+  /// รหัสพนักงาน — **ห้ามนำกลับมาใช้ซ้ำ แม้แถวเดิมถูกลบไปแล้ว**
+  ///
+  /// unique **เต็มตาราง ไม่ใช่ partial** ซึ่งเป็นข้อยกเว้นของกฎที่ทะเบียนอื่นใช้ ·
+  /// รหัสที่เอากลับมาใช้ใหม่ทำให้ประวัติของคนสองคนอ่านต่อกันเป็นคนเดียว และไม่มีอะไร
+  /// ในระบบบอกได้ว่ามันเคยเปลี่ยนมือ
+  code String @db.VarChar(30)
+
+  firstName String  @map("first_name") @db.VarChar(100)
+  lastName  String  @map("last_name") @db.VarChar(100)
+  /// ชื่อเล่น — ในคลินิกเรียกกันด้วยชื่อเล่นจริง ๆ
+  nickname  String? @db.VarChar(50)
+
+  /// เบอร์โทรกับอีเมล — **ช่องทางติดต่อ ไม่ใช่ตัวระบุตัวตน** จึงไม่บังคับและไม่ unique ·
+  /// พนักงานสองคนใช้เบอร์เดียวกันได้ (เบอร์บ้าน) และคนที่ไม่มีอีเมลก็ยังเป็นพนักงาน
+  ///
+  /// **อีเมลนี้ไม่เกี่ยวกับการล็อกอิน** — ฝั่งหลังบ้านเข้าด้วยชื่อผู้ใช้ · ส่วนอีเมลของ
+  /// Google อยู่ที่ `pet_owner_account` ซึ่งเป็นคนละฝั่งกันทั้งหมด
+  phone String? @db.VarChar(30)
+  email String? @db.VarChar(255)
+
+  /// วันที่เริ่มงาน — เก็บเป็นวันที่ล้วน ไม่มีเวลา
+  ///
+  /// `@db.Date` ไม่ใช่ `DateTime` เต็ม เพราะไม่มีใครรู้ว่าเริ่มงานกี่โมง และการเก็บเวลา
+  /// ปลอมไว้จะทำให้คนที่อยู่คนละเขตเวลาเห็นวันคลาดกันหนึ่งวัน
+  hiredAt DateTime? @map("hired_at") @db.Date
+
+  workStatus WorkStatus @default(ACTIVE) @map("work_status")
+
+  departmentId BigInt?     @map("department_id")
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  positionId BigInt?   @map("position_id")
+  position   Position? @relation(fields: [positionId], references: [id])
+
+  /// บันทึกเพิ่มเติม — `Text` เพราะไม่มีความยาวที่ตอบได้ · ไม่มี index เพราะไม่มีใครค้น
+  /// จากช่องนี้ · เพดานความยาวบังคับที่ชั้น service ไม่ใช่ที่ฐาน
+  note String? @db.Text
+
+  /// บัญชีของพนักงานคนนี้ — **หนึ่งคนหนึ่งบัญชี** · null = ยังไม่ได้เปิดบัญชีให้
+  user User?
+
+  /// เคสที่รับเป็นสัตวแพทย์ — มีเฉพาะพนักงานที่เป็นหมอ
+  visits Visit[]
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@index([departmentId])
+  @@index([positionId])
+  @@index([workStatus])
+  @@index([deletedAt])
+  @@map("employee")
+}

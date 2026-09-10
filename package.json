@@ -1,0 +1,36 @@
+{
+  "name": "pawsoft",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "bun --filter '*' dev",
+    "dev:api": "bun --filter @pawsoft/api dev",
+    "dev:web": "bun --filter @pawsoft/web dev",
+    "typecheck": "bun --filter @pawsoft/api typecheck",
+    "typecheck:web": "bun --filter @pawsoft/web typecheck",
+    "test": "bun --filter @pawsoft/api test",
+    "db:push": "bun --filter @pawsoft/api db:push",
+    "db:push:test": "bun --filter @pawsoft/api db:push:test",
+    "db:push:e2e": "bun --filter @pawsoft/api db:push:e2e",
+    "db:reset": "bun --filter @pawsoft/api db:reset",
+    "db:studio": "bun --filter @pawsoft/api db:studio",
+    "db:seed": "bun --filter @pawsoft/api db:seed",
+    "db:seed:e2e": "bun --filter @pawsoft/api db:seed:e2e",
+    "docker:dev": "docker compose -f docker/docker-compose.dev.yml up -d",
+    "docker:dev:down": "docker compose -f docker/docker-compose.dev.yml down",
+    "start:api": "bun --filter @pawsoft/api start",
+    "build:web": "bun --filter @pawsoft/web build",
+    "start:web": "bun --filter @pawsoft/web start",
+    "e2e:prep": "bun run db:push:e2e && bun run db:seed:e2e",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:report": "playwright show-report e2e/.report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "typescript": "^7.0.2"
+  }
+}

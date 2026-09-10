@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    // ไม่มี DOM — ฝั่งนี้ไม่มี `window` ไม่มี `document` และการที่มันคอมไพล์ไม่ผ่าน
+    // คือสิ่งที่บอกว่าโค้ดเส้นนั้นเขียนผิดฝั่ง
+    "lib": ["ESNext"],
+    "types": ["bun"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+
+    // Prisma 7 สร้าง client ออกมาเป็น `.ts` ไม่ใช่ `.js` + `.d.ts` อีกต่อไป การ import
+    // มันจึงต้องเขียนนามสกุลติดไปด้วย · Bun รันไฟล์ `.ts` ตรง ๆ อยู่แล้ว จึงไม่มีขั้น
+    // แปลงที่จะทำให้ path นี้ผิด
+    "allowImportingTsExtensions": true,
+
+    // TypeScript 7 เอา `baseUrl` ออก — path ทุกตัวจึงเทียบจากไฟล์นี้ ไม่ใช่จากรากที่ตั้งไว้
+    "paths": {
+      "@/*": ["./src/*"],
+      "@kit": ["./src/kit/index.ts"],
+      "@kit/*": ["./src/kit/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@generated/client": ["./prisma/generated/client.ts"]
+    }
+  },
+  "include": ["src/**/*", "test/**/*", "prisma/**/*"]
+}

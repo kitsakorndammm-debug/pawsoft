@@ -1,0 +1,228 @@
+// ของที่คลินิกขายและให้บริการ — ยา กับ รายการรักษา
+//
+// สองเรื่องที่รูปเหมือนกันจนน่าจะรวมเป็นตารางเดียว แต่**แยกกันโดยตั้งใจ**:
+// ยามีหน่วยนับ ตัวยาสำคัญ ขนาดบรรจุ และวันหนึ่งจะมีสต็อก · รายการรักษามีระยะเวลาและ
+// ไม่มีอะไรให้นับ · ตารางเดียวแปลว่าครึ่งหนึ่งของคอลัมน์เป็น null เสมอไม่ว่าจะเป็นแถวไหน
+
+/// หมวดยา — ยาฆ่าเชื้อ · วัคซีน · วิตามิน
+///
+/// **จัดการจากในหน้ายา ไม่ใช่เมนูแยก** (ผู้ใช้ตัดสิน 2026-09-01) · คนที่มาเพิ่มยา
+/// คือคนเดียวกับที่รู้ว่าต้องมีหมวดใหม่ · บังคับให้ออกไปอีกเมนูแล้วกลับมา คือการขัดจังหวะ
+/// งานที่กำลังทำค้างอยู่
+model DrugCategory {
+  id   BigInt @id @default(autoincrement())
+  name String @db.VarChar(200)
+
+  /// ลำดับที่ผู้ใช้ลากเอง · `null` = แถวที่ถูกลบ — ดู `Department.sortOrder`
+  sortOrder Int? @map("sort_order")
+
+  drugs Drug[]
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@index([sortOrder])
+  @@index([deletedAt])
+  @@map("drug_category")
+}
+
+/// ยาและเวชภัณฑ์
+model Drug {
+  id BigInt @id @default(autoincrement())
+
+  /// รหัสยา — **ไม่บังคับ** (ผู้ใช้ตัดสิน 2026-09-01)
+  ///
+  /// คลินิกที่เรียกยาด้วยรหัสจริงก็ใส่ · ที่เรียกด้วยชื่อก็ปล่อยว่าง · ต่างจาก
+  /// `employee.code` ที่บังคับ เพราะพนักงานสองคนชื่อซ้ำกันได้ แต่ยาสองตัวชื่อเดียวกัน
+  /// คือรายการที่คนกรอกใบเสร็จแยกไม่ออกอยู่ดี
+  ///
+  /// **ห้ามซ้ำเฉพาะแถวที่ยังไม่ถูกลบ และเฉพาะแถวที่กรอกมา** — partial unique ที่มี
+  /// `code IS NOT NULL` ด้วย ไม่งั้นยาที่ไม่มีรหัสจะมีได้ตัวเดียวทั้งคลินิก
+  code String? @db.VarChar(30)
+
+  /// ชื่อที่คนในคลินิกเรียก — ชื่อการค้า
+  name String @db.VarChar(200)
+
+  /// ตัวยาสำคัญ — `Amoxicillin` · ชื่อสามัญที่ใช้เทียบว่ายาสองตัวคือตัวเดียวกัน
+  ///
+  /// แยกจาก `name` เพราะยาชื่อการค้าต่างกันมีตัวยาเดียวกันได้ · และคนที่แพ้ยาแพ้ตัวยา
+  /// ไม่ได้แพ้ยี่ห้อ
+  genericName String? @map("generic_name") @db.VarChar(200)
+
+  /// หน่วยนับ — `เม็ด` `ขวด` `มล.`
+  ///
+  /// **ราคาที่กรอกคือราคาต่อหนึ่งหน่วยนี้** · ไม่มีหน่วย ราคาก็ตอบไม่ได้ว่าราคาของอะไร
+  /// จึงบังคับกรอกเมื่อกรอกราคา — บังคับที่ชั้น service ไม่ใช่ที่ฐาน เพราะยาที่ยังไม่
+  /// ตั้งราคาก็ยังไม่ต้องมีหน่วย
+  unit String? @db.VarChar(30)
+
+  /// ขนาดบรรจุ — `ขวด 100 ml` · ข้อความล้วน ไม่ได้เอาไปคำนวณ
+  packageSize String? @map("package_size") @db.VarChar(100)
+
+
+  /**
+   * ราคาต่อหน่วย — **ไม่บังคับ** (ผู้ใช้ตัดสิน 2026-09-01)
+   *
+   * `null` = ยังไม่ตั้งราคา ซึ่งต่างจาก `0` ที่แปลว่าแจกฟรี · หน้าจอต้องแยกสองอย่างนี้
+   * ให้ออก ไม่งั้นยาที่ยังไม่ตั้งราคาจะถูกคิดเงินเป็นศูนย์
+   *
+   * `Decimal(12, 2)` ไม่ใช่ `Float` — `0.1 + 0.2 !== 0.3` และเงินที่คลาดไปเศษสตางค์
+   * คือใบเสร็จที่บวกไม่ลง · **บนสายเป็น string** ไม่ใช่ number ด้วยเหตุผลเดียวกัน
+   *
+   * **ราคานี้คือราคาวันนี้ ไม่ใช่ราคาที่เคยขาย** — วันที่มีตารางใบเสร็จ ใบต้องคัดลอก
+   * ราคาไปเก็บของตัวเอง ไม่ใช่ชี้มาที่นี่ · ไม่งั้นขึ้นราคาเมื่อไหร่ ใบเสร็จเก่าทุกใบ
+   * เปลี่ยนยอดตามเงียบ ๆ และไม่มีอะไรบอกว่ามันเคยเป็นเท่าไหร่
+   */
+  price Decimal? @db.Decimal(12, 2)
+
+  categoryId BigInt?       @map("category_id")
+  category   DrugCategory? @relation(fields: [categoryId], references: [id])
+
+  /// ครั้งที่ยาตัวนี้ถูกจ่าย — กันการลบยาที่เคยจ่ายไปแล้ว (`onDelete: Restrict`)
+  visitDrugs VisitDrug[]
+
+  /// ประวัติสต็อก — รับเข้า/จ่ายออก/ปรับยอดของยาตัวนี้ทั้งหมด
+  stockMovements DrugStockMovement[]
+
+  /// เลิกใช้แล้ว — ยังอยู่ในประวัติการรักษาเก่า แต่ไม่ให้เลือกในรายการใหม่
+  ///
+  /// คนละเรื่องกับการลบ · ลบคือแถวที่สร้างผิด · เลิกใช้คือยาที่เคยใช้จริงแต่วันนี้ไม่มีแล้ว
+  isActive Boolean @default(true) @map("is_active")
+
+  note String? @db.Text
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("drug")
+}
+
+/// ประเภทการเคลื่อนไหวของสต็อกยา
+enum DrugStockMovementType {
+  /// รับเข้า — ซื้อ/เติมสต็อกเข้ามาใหม่
+  RECEIVE
+
+  /// จ่ายออก — ตัดอัตโนมัติตอนจ่ายยาให้คนไข้ (`VisitDrug`) · `quantity` เป็นลบเสมอ
+  DISPENSE
+
+  /// คืนสต็อก — ตัดอัตโนมัติเมื่อลบรายการจ่ายยาที่ผิดออกจากคิว (`VisitDrug` ถูกลบ) ·
+  /// `quantity` เป็นบวกเสมอ ตรงข้ามกับ `DISPENSE` ที่มันแก้คืน
+  DISPENSE_REVERSED
+
+  /// ปรับยอด — นับสต็อกจริงไม่ตรง ของเสีย หรือหมดอายุ · บวกหรือลบก็ได้ · **ต้องมี `reason`**
+  ADJUST
+}
+
+/// ประวัติการเคลื่อนไหวของสต็อกยา — เป็น log ที่ไม่แก้ไม่ลบ แก้ยอดผิดด้วยการเพิ่มแถว
+/// `ADJUST` แถวใหม่ ไม่ใช่แก้แถวเก่า · จำนวนคงเหลือของยาแต่ละตัวคือผลรวม `quantity`
+/// ของทุกแถวที่ `drugId` ตรงกัน ไม่ได้เก็บเป็นตัวเลขแยกไว้ที่ `Drug` เพราะจะกลายเป็น
+/// ข้อมูลชุดเดียวกันสองสำเนาที่ต้องคอยเทียบว่าตรงกันไหม
+model DrugStockMovement {
+  id BigInt @id @default(autoincrement())
+
+  drugId BigInt @map("drug_id")
+  drug   Drug   @relation(fields: [drugId], references: [id], onDelete: Restrict)
+
+  type DrugStockMovementType
+
+  /// จำนวนที่เปลี่ยน — มีเครื่องหมาย บวกคือเพิ่มสต็อก ลบคือลดสต็อก
+  ///
+  /// `Decimal(10,2)` ไม่ใช่ `Int` — ตรงกับความละเอียดของ `VisitDrug.quantity` ที่มีอยู่แล้ว
+  /// เผื่อยาที่หน่วยเป็นเศษ เช่น มล.
+  quantity Decimal @db.Decimal(10, 2)
+
+  /// เหตุผล — บังคับกรอกเฉพาะตอน `type = ADJUST` (บังคับที่ฐานด้วย CHECK)
+  reason String? @db.VarChar(500)
+
+  /// รายการจ่ายยาที่ทำให้เกิดแถวนี้ — ใส่เฉพาะ `DISPENSE`/`DISPENSE_REVERSED`
+  ///
+  /// ไม่บังคับ (`onDelete` ไม่ระบุ = ปล่อยเป็นค่า default ของ FK ว่างได้ คือ `SET NULL`)
+  /// เพราะ `VisitDrug` ลบจริงได้ (hard delete) — ลบไปแล้วแถวประวัตินี้ต้องยังอยู่
+  /// แค่ไม่มีอะไรให้ชี้กลับไปแล้ว
+  visitDrugId BigInt?    @map("visit_drug_id")
+  visitDrug   VisitDrug? @relation(fields: [visitDrugId], references: [id])
+
+  /// ใครเป็นคนบันทึกรายการนี้
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy BigInt   @map("created_by")
+
+  @@index([drugId])
+  @@index([visitDrugId])
+  @@index([createdAt])
+  @@map("drug_stock_movement")
+}
+
+/// หมวดบริการ — ตรวจ · ผ่าตัด · วัคซีน · อาบน้ำ
+///
+/// **แยกจาก `DrugCategory` ไม่ใช้ตารางเดียวกัน** · หมวดของยากับหมวดของบริการไม่เคย
+/// ปนกันในลิสต์เดียว · ตารางเดียวแปลว่าทุกที่ที่เลือกหมวดต้องกรองว่าเป็นหมวดของอะไร
+/// และลืมกรองครั้งเดียวก็เลือก "วัคซีน" ของอีกฝั่งได้
+model ServiceCategory {
+  id   BigInt @id @default(autoincrement())
+  name String @db.VarChar(200)
+
+  sortOrder Int? @map("sort_order")
+
+  items ServiceItem[]
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@index([sortOrder])
+  @@index([deletedAt])
+  @@map("service_category")
+}
+
+/// รายการรักษาและบริการ
+model ServiceItem {
+  id BigInt @id @default(autoincrement())
+
+  /// รหัสรายการ — ไม่บังคับ ด้วยเหตุผลเดียวกับ `Drug.code`
+  code String? @db.VarChar(30)
+
+  name String @db.VarChar(200)
+
+  /// คำอธิบาย — สิ่งที่รายการนี้ทำจริง
+  ///
+  /// มีไว้ให้คนที่ไม่ได้เป็นสัตวแพทย์ (เคาน์เตอร์) เลือกรายการได้ถูกโดยไม่ต้องเดา
+  /// จากชื่อย่อ · และให้เจ้าของสัตว์เข้าใจว่าจ่ายค่าอะไร
+  description String? @db.Text
+
+  /// ราคา — ไม่บังคับ ด้วยเหตุผลเดียวกับ `Drug.price` · ดู `///` ที่นั่น
+  price Decimal? @db.Decimal(12, 2)
+
+  categoryId BigInt?          @map("category_id")
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id])
+
+  /// ครั้งที่รายการนี้ถูกทำ
+  visitServices VisitService[]
+
+  isActive Boolean @default(true) @map("is_active")
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("service_item")
+}

@@ -1,0 +1,382 @@
+// ใครเข้าระบบนี้ได้ และเข้าได้ในฐานะอะไร
+//
+// **สองฝั่ง สองตาราง ไม่ใช่ตารางเดียวที่มีคอลัมน์บอกประเภท** (ผู้ใช้ตัดสิน 2026-08-31)
+//
+//   `User`              หลังบ้าน — ชื่อผู้ใช้ + รหัสผ่าน · ผู้ดูแลสร้างให้เท่านั้น
+//   `PetOwnerAccount`   เจ้าของสัตว์ — Google เท่านั้น · สร้างตัวเองตอนล็อกอินครั้งแรก
+//
+// ถ้ารวมเป็นตารางเดียว ทุก query ของหลังบ้านต้องจำใส่ `where kind = 'STAFF'` เอง และ
+// วันที่ลืมครั้งเดียว เจ้าของสัตว์จะโผล่ในหน้าจัดการพนักงาน · แยกตารางแปลว่าคอมไพเลอร์
+// เป็นคนกัน ไม่ใช่ความจำของคนเขียน
+//
+// อีกเหตุผลคือ `createdBy` ของทั้งระบบชี้มาที่ `user.id` ตัวเดียว ไม่ต้องตอบคำถามว่า
+// เลขนี้เป็นพนักงานหรือเจ้าของสัตว์
+
+/// บทบาท — ชุดสิทธิ์ที่ผู้ใช้หลังบ้านคนหนึ่งถืออยู่
+///
+/// สิทธิ์ไม่ได้ผูกกับคน แต่ผูกกับบทบาท เพราะคำถามที่ผู้ดูแลตอบได้จริงคือ "สัตวแพทย์
+/// ทำอะไรได้บ้าง" ไม่ใช่ "หมอสมชายทำอะไรได้บ้าง" · ให้สิทธิ์รายคนแปลว่าวันที่กฎเปลี่ยน
+/// ต้องไล่แก้ทีละคนและจะมีคนตกหล่นเสมอ
+model Role {
+  id   BigInt @id @default(autoincrement())
+  name String @db.VarChar(100)
+
+  /// บทบาทระบบ — **ถือทุก key ที่ประกาศไว้ในโค้ด โดยไม่ผ่าน `role_permission`**
+  ///
+  /// มีไว้กันไม่ให้ระบบล็อกผู้ดูแลออกจากตัวเอง: key ที่เพิ่งประกาศใหม่ยังไม่มีใครถือ
+  /// ซึ่งรวมถึง key ของหน้าจัดการสิทธิ์เองด้วย · ถ้าบทบาทระบบต้องรับ grant เหมือนคนอื่น
+  /// การเพิ่ม key ของหน้านั้นจะทำให้ไม่มีใครเข้าหน้าที่ใช้ grant มันได้อีก
+  ///
+  /// ลบไม่ได้ และแก้สิทธิ์ไม่ได้ — เพราะไม่มีอะไรให้แก้ มันถือทุกอย่างอยู่แล้ว
+  isSystem Boolean @default(false) @map("is_system")
+
+  users       User[]
+  permissions RolePermission[]
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@map("role")
+}
+
+/// สิทธิ์หนึ่งข้อ — **ประกาศในโค้ด ไม่ใช่ของที่ผู้ใช้เพิ่มเองได้**
+///
+/// ตารางนี้ไม่มีหน้าจัดการ เพราะมีแต่โค้ดที่รู้ว่าจะถามว่า "คนนี้ทำสิ่งนี้ได้ไหม" ที่ไหน ·
+/// key ที่ผู้ใช้พิมพ์เพิ่มเองจะไม่มีโค้ดไหนถามถึง — เป็นสวิตช์ที่กดแล้วไม่มีผล
+///
+/// แถวมาจาก `kit/permissions.ts` ผ่าน `syncPermissions()` ตอนบูต · **hard delete** —
+/// key ที่โค้ดไม่ประกาศแล้วจะถูกลบทิ้ง ไม่ใช่ทำเครื่องหมายว่าลบ เพราะมันไม่ได้หายไปไหน
+/// มันไม่เคยมีอยู่จริงตั้งแต่แรก
+model Permission {
+  id BigInt @id @default(autoincrement())
+
+  /// `main:master:read` — รูป `<ส่วนของระบบ>:<เมนู>:<การกระทำ>`
+  ///
+  /// **จัดกลุ่มตามเมนูบนหน้าจอ ไม่ใช่ตามตาราง** · ทะเบียนสิบตารางที่อยู่ในเมนูตั้งค่า
+  /// เดียวกันใช้ key คู่เดียวกัน · ตารางใหม่ไม่ได้แปลว่าต้องมี key ใหม่
+  key String @unique @db.VarChar(100)
+
+  /// คำไทยที่คนอ่านในหน้าตั้งค่าสิทธิ์
+  label String @db.VarChar(200)
+
+  /// โมดูลเจ้าของ key · ใช้จัดกลุ่มในหน้าตั้งค่า
+  groupCode String @map("group_code") @db.VarChar(50)
+  groupName String @map("group_name") @db.VarChar(100)
+
+  roles RolePermission[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("permission")
+}
+
+/// บทบาทนี้ถือ key นี้
+///
+/// junction ล้วน — **hard delete** เพราะการถอนสิทธิ์คือการเอาแถวออก ไม่ใช่การเก็บแถว
+/// ที่บอกว่า "เคยมีสิทธิ์" ไว้ให้ query ทุกตัวต้องกรองทิ้ง
+///
+/// `onDelete: Cascade` ทั้งสองทาง: ลบบทบาท แถวที่ผูกอยู่ต้องหายตาม · key ที่โค้ดเลิก
+/// ประกาศก็เช่นกัน · ไม่มี `updatedAt`/`updatedBy` เพราะแถวนี้ไม่มีอะไรให้แก้ — มีหรือไม่มี
+model RolePermission {
+  roleId       BigInt @map("role_id")
+  permissionId BigInt @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy BigInt   @map("created_by")
+
+  @@id([roleId, permissionId])
+  @@map("role_permission")
+}
+
+/// บัญชีผู้ใช้หลังบ้าน — พนักงานคลินิก
+///
+/// **ตารางเดียวในระบบที่ไม่มี soft delete** · ระงับได้ ลบไม่ได้ เพราะ `createdBy` ของ
+/// ทุกแถวในทุกตารางชี้มาที่ `user.id` · ลบบัญชีทิ้งแปลว่าประวัติทั้งหมดที่เขาเคยสร้าง
+/// ชี้ไปยังแถวที่ไม่มีอยู่ และคำถามว่า "ใครสร้างรายการนี้" ตอบไม่ได้อีกต่อไป
+///
+/// **แถวแรกของตารางนี้คือจุดที่ทุกอย่างเริ่ม** — มันไม่มีคนสร้าง จึงเป็นแถวเดียวในระบบที่
+/// `createdBy` เป็น null ได้ · ทางเลือกอื่นคือให้มันชี้ตัวเอง (`createdBy = 1`) ซึ่งต้อง
+/// insert โดยระบุ `id` เอง แล้ว sequence จะไม่ขยับ และ `db:reset` จะพังทุกครั้งถัดไป
+/// เพราะแถวที่สองขอเลข 1 ที่ถูกใช้ไปแล้ว
+///
+/// **สร้างโดยผู้ดูแลเท่านั้น ไม่มีการสมัครเอง** — ต่างจาก `PetOwnerAccount` โดยสิ้นเชิง
+model User {
+  id BigInt @id @default(autoincrement())
+
+  /// ชื่อที่ใช้ล็อกอิน
+  ///
+  /// `@unique` เต็ม ไม่ใช่ partial unique — ตารางนี้ไม่มี `deletedAt` จึงไม่มีแถวที่ต้อง
+  /// ยกเว้น · เป็นข้อยกเว้นเดียวของกฎ "ห้ามใช้ `@unique` เปล่าบนตารางที่ soft delete"
+  ///
+  /// **เปลี่ยนชื่อผู้ใช้ = ทุกเซสชันของบัญชีนี้ถูกถอน** — ดู `///` บน `UserSession`
+  username String @unique @db.VarChar(50)
+
+  /// argon2 ผ่าน `Bun.password` · ชื่อคอลัมน์มีคำว่า `Hash` เพราะสิ่งที่อยู่ข้างในไม่ใช่รหัสผ่าน
+  passwordHash String @map("password_hash") @db.VarChar(255)
+
+  roleId BigInt @map("role_id")
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  /// พนักงานเจ้าของบัญชี — **หนึ่งพนักงานมีได้บัญชีเดียว**
+  ///
+  /// `null` = บัญชีที่ไม่ใช่ของคน · บัญชี `system` ที่เป็นเจ้าของ `createdBy` แถวแรกสุด
+  /// เป็นเคสนั้น · และบัญชีที่เปิดไว้ก่อนจะผูกกับพนักงานก็เช่นกัน
+  ///
+  /// **`@unique` คือสิ่งที่ทำให้ Prisma อ่านว่าเป็น 1:1** — ขาดไปมันจะกลายเป็น 1:N ทันที
+  /// และพนักงานคนเดียวจะมีหลายบัญชีได้โดยไม่มีอะไรห้าม · Postgres ยอมให้ `null` ซ้ำได้
+  /// ภายใต้ unique อยู่แล้ว ซึ่งตรงกับที่ต้องการพอดี
+  employeeId BigInt?   @unique @map("employee_id")
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+
+  /// ระงับบัญชี — คู่ At/By บังคับให้มาด้วยกันด้วย CHECK ใน patch.sql
+  ///
+  /// มีผลทันที ไม่ใช่ตอนล็อกอินรอบหน้า — `me()` ตรวจซ้ำทุก request จึงเตะคนที่ถือ
+  /// เซสชันอยู่แล้วออกได้ · ถ้าตรวจแค่ตอนล็อกอิน คนที่ล็อกอินค้างไว้จะทำงานต่อได้ทั้งวัน
+  suspendedAt DateTime? @map("suspended_at")
+  suspendedBy BigInt?   @map("suspended_by")
+
+  /// ยังไม่ได้ตั้งรหัสของตัวเอง — รหัสที่ถืออยู่คือรหัสที่ผู้ดูแลออกให้
+  ///
+  /// `true` เป็นค่าตั้งต้นโดยตั้งใจ · รหัสที่ผู้ดูแลออกให้เดินทางผ่านแชทหรือกระดาษ
+  /// ใครที่เห็นระหว่างทางก็ล็อกอินได้ · ธงนี้ทำให้บัญชีทำได้อย่างเดียวคือเปลี่ยนรหัส
+  /// ด่านอยู่ที่ `getActor` ใน `kit/actor.ts` ไม่ได้ฝากไว้กับหน้าจอ
+  mustChangePassword Boolean @default(true) @map("must_change_password")
+
+  /// นับรหัสผิดติดกัน — **รีเซ็ตเป็น 0 ทุกครั้งที่ล็อกอินสำเร็จ**
+  failedAttempts Int @default(0) @map("failed_attempts")
+
+  /// ถูกล็อกเพราะรหัสผิดครบจำนวน
+  ///
+  /// **`lockedAt` ไม่ใช่ `lockedUntil` โดยตั้งใจ** — ล็อกไม่ปลดตัวเองเมื่อเวลาผ่านไป
+  /// ต้องมีผู้ดูแลมาปลด · ล็อกที่หมดอายุเองแปลว่าคนที่เดารหัสรอสิบห้านาทีแล้วเดาต่อได้
+  /// เรื่อย ๆ และไม่มีใครรู้ว่ามันเคยเกิดขึ้น
+  lockedAt DateTime? @map("locked_at")
+
+  /// ถูกล็อกมาแล้วกี่ครั้งตั้งแต่เปิดบัญชี — **ไม่เคยรีเซ็ต** ต่างจาก `failedAttempts`
+  ///
+  /// เลขที่รีเซ็ตตอบได้แค่ "ตอนนี้มีปัญหาไหม" · เลขที่ไม่รีเซ็ตตอบว่า "บัญชีนี้โดนพยายาม
+  /// เข้ามากี่รอบแล้ว" ซึ่งเป็นคำถามที่คนดูแลความปลอดภัยถาม
+  lockCount Int @default(0) @map("lock_count")
+
+  lastLoginAt DateTime? @map("last_login_at")
+
+  sessions  UserSession[]
+  loginLogs LoginLog[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// **null ได้แถวเดียวในระบบ** — บัญชีแรกที่ seed สร้าง ซึ่งไม่มีคนสร้าง
+  createdBy BigInt?  @map("created_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy BigInt?  @map("updated_by")
+
+  @@map("user")
+}
+
+/// เซสชันของผู้ใช้หลังบ้านหนึ่งครั้ง
+///
+/// **hard delete เท่านั้น** — "แถวมีอยู่" แปลว่า "ยังใช้ได้" ตรง ๆ ไม่ต้องมีเงื่อนไขอื่น
+/// อ่านประกอบ · เซสชันที่ soft delete แล้วยังอยู่ในตาราง คือแถวที่ query ตัวไหนลืมกรอง
+/// ก็ปล่อยคนที่ถูกถอนสิทธิ์ไปแล้วเข้ามาได้
+///
+/// **เก็บ sha256 ของ token ไม่ใช่ตัว token** · token ดิบอยู่ใน cookie ของเจ้าตัวที่เดียว ·
+/// ใช้ sha256 ไม่ใช่ argon2 โดยตั้งใจ — token คือสุ่ม 32 ไบต์อยู่แล้ว ไม่มีอะไรให้เดา
+/// และฟังก์ชันนี้ทำงานทุก request · เป้าหมายคือ "ฐานที่หลุดออกไปใช้อะไรไม่ได้" เท่านั้น
+///
+/// **สามเหตุที่เซสชันถูกถอนก่อนหมดอายุ:**
+///   1. สิทธิ์ของบทบาทเปลี่ยน — ถอนของทุกคนที่ถือบทบาทนั้น
+///   2. `user.username` เปลี่ยน
+///   3. `user.roleId` เปลี่ยน
+///
+/// ทั้งสามข้อคือกรณีที่ "คนนี้ทำอะไรได้บ้าง" เปลี่ยนไป · เซสชันถือคำตอบเก่าไว้ ถ้าไม่ถอน
+/// คนที่เพิ่งถูกลดสิทธิ์จะใช้สิทธิ์เดิมต่อได้จนกว่าเซสชันจะหมดอายุเอง
+model UserSession {
+  id BigInt @id @default(autoincrement())
+
+  userId BigInt @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  /// sha256 ของ token — 64 ตัวอักษรฐานสิบหกเสมอ
+  tokenHash String @unique @map("token_hash") @db.VarChar(64)
+
+  /// **นับจากตอนล็อกอิน ไม่ต่ออายุ** · สิบชั่วโมง = หนึ่งวันทำงาน
+  ///
+  /// เซสชันที่ต่ออายุทุกครั้งที่ขยับเมาส์ คือเซสชันที่ไม่มีวันหมดอายุสำหรับเครื่องที่
+  /// เปิดค้างไว้ ซึ่งเป็นเครื่องที่เสี่ยงที่สุด
+  expiresAt DateTime @map("expires_at")
+
+  /// เห็นครั้งล่าสุดเมื่อไหร่ — อัปเดตทุก request แต่**ไม่ขยับ `expiresAt`**
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  /// เก็บไว้ให้คนอ่าน ไม่ได้ใช้ตัดสินอะไร — ทั้งคู่ปลอมได้ทั้งคู่
+  ip        String? @db.VarChar(45)
+  userAgent String? @map("user_agent") @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("user_session")
+}
+
+/// บัญชีเจ้าของสัตว์ — ฝั่งลูกค้า
+///
+/// **ไม่มีคอลัมน์รหัสผ่าน** — ไม่ใช่ nullable แต่ไม่มีเลย · ทางเข้าเดียวคือ Google
+/// คอลัมน์ที่มีอยู่แต่เป็น null ทุกแถว คือทางที่เปิดรอไว้ให้ใครสักคนเผลอใช้วันหนึ่ง
+///
+/// **สร้างตัวเองตอนล็อกอิน Google ครั้งแรกที่สำเร็จ** · ไม่มี `createdBy` เพราะไม่มี
+/// พนักงานคนไหนสร้างมัน — ต่างจากทุกตารางอื่นในระบบ
+///
+/// **คนละเรื่องกับทะเบียนเจ้าของสัตว์ที่คลินิกจะมีทีหลัง** · ตารางนี้คือ "วิธีเข้าระบบ"
+/// ส่วนทะเบียนคือ "คนที่คลินิกรู้จัก" · คนที่พาหมามารักษาแต่ไม่เคยเปิดเว็บ มีแค่ทะเบียน ·
+/// คนที่เพิ่งล็อกอินเข้ามาดูแต่ยังไม่เคยมา มีแค่บัญชี · ผูกกันทีหลังด้วย FK ที่ null ได้
+///
+/// **ไม่มีสิทธิ์ (permission) ใด ๆ** · บัญชีนี้เห็นเฉพาะข้อมูลของตัวเอง ซึ่งบังคับด้วยการที่
+/// ทุก service ฝั่งนี้กรองด้วย id ที่มาจากเซสชัน ไม่ใช่ด้วย key · key ตอบคำถามว่า
+/// "บทบาทนี้ทำอะไรได้" ส่วนคำถามฝั่งนี้คือ "แถวไหนเป็นของคุณ" ซึ่งเป็นคนละคำถาม
+model PetOwnerAccount {
+  id BigInt @id @default(autoincrement())
+
+  /// รหัสผู้ใช้ของ Google (`sub`) — **นี่คือตัวตน ไม่ใช่ email**
+  ///
+  /// Google รับประกันว่าค่านี้ไม่เปลี่ยนและไม่ถูกนำกลับมาใช้ซ้ำ · ส่วน email เปลี่ยนได้
+  /// (เปลี่ยนชื่อ · ย้ายโดเมน) และเลิกใช้แล้วโดนเอาไปให้คนอื่นได้ในองค์กร · ผูกตัวตน
+  /// ไว้กับ email แปลว่าวันที่เจ้าของสัตว์เปลี่ยนอีเมล เขาจะกลายเป็นคนใหม่ที่ไม่มี
+  /// ประวัติสัตว์เลี้ยงเดิม หรือแย่กว่านั้น คนที่ได้อีเมลเก่าไปจะเห็นประวัติของเขา
+  googleSub String @unique @map("google_sub") @db.VarChar(255)
+
+  /// อีเมลจาก Google — **อัปเดตตามทุกครั้งที่ล็อกอิน** เพราะ `googleSub` คือตัวตน
+  /// ไม่ใช่ตัวนี้ · unique เต็ม ตารางนี้ไม่มี soft delete จึงไม่มีแถวที่ต้องยกเว้น
+  email String @unique @db.VarChar(255)
+
+  /// ชื่อที่ Google ส่งมา — อัปเดตตามทุกครั้งที่ล็อกอินเช่นกัน
+  displayName String  @map("display_name") @db.VarChar(255)
+  pictureUrl  String? @map("picture_url") @db.VarChar(500)
+
+  /// ระงับบัญชี — คู่ At/By บังคับด้วย CHECK · `suspendedBy` ชี้ `user.id` เพราะคนที่
+  /// ระงับคือพนักงาน เจ้าของสัตว์ระงับบัญชีของกันเองไม่ได้
+  suspendedAt DateTime? @map("suspended_at")
+  suspendedBy BigInt?   @map("suspended_by")
+
+  lastLoginAt DateTime? @map("last_login_at")
+
+  sessions  PetOwnerSession[]
+  loginLogs LoginLog[]
+
+  /// ตัวคนที่จับคู่กับบัญชีนี้ — `null` = ยังไม่มีใครจับคู่ให้
+  owner Owner?
+
+  /// การจองที่บัญชีนี้กดเอง (ทาง `ONLINE`)
+  appointments Appointment[]
+
+  /// การจ่ายที่ลูกค้าแนบสลิปเอง — ดู `Payment.createdBy`
+  payments Payment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("pet_owner_account")
+}
+
+/// เซสชันของเจ้าของสัตว์หนึ่งครั้ง
+///
+/// รูปเดียวกับ `UserSession` ทุกอย่าง ต่างกันที่**อายุ 30 วัน ไม่ใช่ 10 ชั่วโมง**
+///
+/// เจ้าของสัตว์เปิดเว็บนาน ๆ ครั้ง — บังคับให้ล็อกอินใหม่ทุกวันบนหน้าที่คนเปิดเดือนละหน
+/// คือความยุ่งยากที่ไม่ได้แลกกับอะไร: บัญชีนี้แก้อะไรของคลินิกไม่ได้เลย มันอ่านข้อมูล
+/// ของตัวเองได้อย่างเดียว · อายุของเซสชันควรสมกับสิ่งที่มันเปิดให้ทำ
+///
+/// **แยกตารางจาก `UserSession` ด้วยเหตุผลเดียวกับที่แยกตารางบัญชี** — เซสชันที่ปนกัน
+/// แปลว่า `me()` ของหลังบ้านต้องกรองเองว่าแถวนี้เป็นของพนักงานจริงไหม
+model PetOwnerSession {
+  id BigInt @id @default(autoincrement())
+
+  petOwnerAccountId BigInt          @map("pet_owner_account_id")
+  petOwnerAccount   PetOwnerAccount @relation(fields: [petOwnerAccountId], references: [id])
+
+  tokenHash String @unique @map("token_hash") @db.VarChar(64)
+
+  expiresAt  DateTime @map("expires_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  ip        String? @db.VarChar(45)
+  userAgent String? @map("user_agent") @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([petOwnerAccountId])
+  @@index([expiresAt])
+  @@map("pet_owner_session")
+}
+
+/// ผลของการพยายามเข้าระบบหนึ่งครั้ง
+///
+/// **`FAILED_NO_USER` มีอยู่ทั้งที่ไม่มีบัญชีให้ผูก** — เพราะคำถามที่ตารางนี้ตอบคือ
+/// "มีใครพยายามเข้าบัญชีของคนอื่นบ้าง" และการไล่เดาชื่อผู้ใช้ก็คือรูปหนึ่งของมัน ·
+/// บันทึกเฉพาะครั้งที่ชื่อผู้ใช้มีจริง แปลว่ามองไม่เห็นการเดาที่ยังเดาไม่ถูก
+///
+/// **`SUCCESS_GOOGLE` แยกจาก `SUCCESS`** เพราะเป็นคนละเหตุการณ์: อันหนึ่งคือมีคน
+/// พิมพ์รหัสถูก อีกอันคือ Google ยืนยันตัวตนให้ · ไม่มี `FAILED_PASSWORD` ฝั่ง Google
+/// เพราะไม่มีรหัสให้ผิด — Google ปฏิเสธคนที่ยืนยันตัวไม่ผ่านตั้งแต่ก่อนกลับมาถึงที่นี่
+enum LoginResultKind {
+  SUCCESS
+  SUCCESS_GOOGLE
+  FAILED_NO_USER
+  FAILED_PASSWORD
+  FAILED_SUSPENDED
+  FAILED_LOCKED
+  LOGOUT
+
+  @@map("login_result_kind")
+}
+
+/// ประวัติการเข้าระบบ — **ทั้งสองฝั่งอยู่ตารางเดียวกัน**
+///
+/// เพราะคำถามที่คนดูแลความปลอดภัยถามคือ "วันนี้มีใครพยายามเข้าระบบนี้บ้าง" ซึ่งไม่ได้
+/// แยกฝั่ง · สองตารางแปลว่าต้อง `UNION` ทุกครั้งที่อยากได้คำตอบเดียว
+///
+/// ต่างจากตารางบัญชีที่แยกกัน เพราะที่นั่นเป็นข้อมูลที่โค้ดคนละชุดอ่านคนละเวลา · ที่นี่
+/// เป็นบันทึกที่อ่านพร้อมกันเสมอ
+///
+/// **`userId` และ `petOwnerAccountId` เป็น null ได้ทั้งคู่ และ null พร้อมกันได้**
+/// (`FAILED_NO_USER` — พิมพ์ชื่อผู้ใช้ที่ไม่มีในระบบ) · แต่ไม่ชี้สองฝั่งพร้อมกัน
+/// ซึ่งบังคับด้วย CHECK ใน patch.sql
+///
+/// **ระบบเขียนอย่างเดียว ไม่มีใครแก้ ไม่มีใครลบ** — จึงมีแค่ `createdAt` และสิทธิ์ของ
+/// เมนูนี้มีแต่ `read`
+model LoginLog {
+  id BigInt @id @default(autoincrement())
+
+  /// ชื่อผู้ใช้ที่พิมพ์เข้ามา หรืออีเมลจาก Google — **เก็บดิบตามที่ส่งมา**
+  ///
+  /// เก็บไว้แม้ไม่มีบัญชีตรง เพราะนั่นคือแถวที่บอกว่ามีคนกำลังเดาอยู่ · เก็บเป็นข้อความ
+  /// ไม่ผูก FK ด้วยเหตุผลเดียวกัน
+  identifier String @db.VarChar(255)
+
+  result LoginResultKind
+
+  userId BigInt? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id])
+
+  petOwnerAccountId BigInt?          @map("pet_owner_account_id")
+  petOwnerAccount   PetOwnerAccount? @relation(fields: [petOwnerAccountId], references: [id])
+
+  ip        String? @db.VarChar(45)
+  userAgent String? @map("user_agent") @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// สามดัชนีสำหรับสามคำถามที่หน้าจอนี้ถาม: ล่าสุดคืออะไร · บัญชีนี้มีประวัติอะไร ·
+  /// วันนี้มีที่ล้มเหลวกี่ครั้ง
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([result, createdAt])
+  @@map("login_log")
+}

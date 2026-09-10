@@ -1,0 +1,235 @@
+// เจ้าของสัตว์ และสัตว์เลี้ยงของเขา
+//
+// **`Owner` ไม่ใช่ `PetOwnerAccount`** — และนี่คือจุดที่พลาดแล้วแก้ยากที่สุดในระบบนี้
+//
+//   `PetOwnerAccount`  บัญชีสำหรับล็อกอิน — มี Google เท่านั้น อยู่ใน `auth.prisma`
+//   `Owner`            ตัวคน — ชื่อ เบอร์ ที่อยู่ · มีได้โดยไม่ต้องมีบัญชีเลย
+//
+// ลูกค้าส่วนใหญ่ของคลินิกจะไม่มีวันสมัคร Google login เขาเดินเข้ามา บอกเบอร์ แล้วกลับ ·
+// ถ้าตัวตนของลูกค้าคือ `PetOwnerAccount` แปลว่าคนกลุ่มนี้ไม่มีที่อยู่ในระบบ และสัตว์
+// ของเขาจะลอยอยู่โดยไม่มีเจ้าของ
+//
+// การจับคู่จึงเป็น `Owner.petOwnerAccountId` ที่ **nullable** — ไม่ใช่ `PetOwnerAccount`
+// ถือ `ownerId` เพราะฝั่งที่มีก่อนเสมอคือ `Owner` ส่วนบัญชีมาทีหลังหรือไม่มาเลย
+
+/// เจ้าของสัตว์ — ตัวคน ไม่ใช่บัญชีล็อกอิน
+model Owner {
+  id BigInt @id @default(autoincrement())
+
+  /// รหัสลูกค้า — ออกให้อัตโนมัติตอนสร้าง ห้ามซ้ำทั้งตารางแม้แถวที่ลบแล้ว
+  ///
+  /// เต็มตาราง ไม่ใช่ partial เหมือน `drug.code` — รหัสลูกค้าไปโผล่บนใบเสร็จและใน
+  /// ประวัติการรักษา · เอากลับมาใช้ซ้ำแปลว่าเอกสารเก่าชี้ไปหาคนใหม่
+  code String @unique @db.VarChar(20)
+
+  /// ชื่อที่ใช้เรียก — **ช่องเดียว ไม่แยกชื่อ/นามสกุล**
+  ///
+  /// คนที่โทรมาบอกว่า "ผมเจ้าของน้องข้าวปั้น" ไม่ได้บอกนามสกุล · บังคับสองช่องแปลว่า
+  /// พนักงานจะพิมพ์ทั้งหมดลงช่องแรกอยู่ดี แล้วช่องที่สองว่างเปล่าทั้งตาราง
+  name String @db.VarChar(200)
+
+  /// เบอร์โทร — **ค้นหาด้วยช่องนี้เป็นหลัก**
+  ///
+  /// คำถามแรกที่ถามตอนรับสายคือ "เบอร์อะไร" ไม่ใช่ "ชื่ออะไร" เพราะชื่อซ้ำกันได้และ
+  /// สะกดผิดได้ · ไม่บังคับ เพราะเคสฉุกเฉินที่คนอุ้มสัตว์คนอื่นเข้ามาก็ต้องเปิดแถวได้
+  phone String? @db.VarChar(30)
+
+  /// เบอร์สำรอง — เบอร์บ้าน หรือเบอร์คนในครอบครัว
+  phoneAlt String? @map("phone_alt") @db.VarChar(30)
+
+  /// อีเมล — **ไม่เกี่ยวกับ `PetOwnerAccount.email`**
+  ///
+  /// อันนั้นมาจาก Google และเป็นตัวล็อกอิน · อันนี้พนักงานพิมพ์เอง ใช้ส่งใบเสร็จ ·
+  /// คนเดียวกันมีสองค่าที่ต่างกันได้ และไม่ใช่ความผิดพลาด
+  email String? @db.VarChar(255)
+
+  address String? @db.VarChar(500)
+
+  /// บัญชี Google ที่จับคู่ไว้ — **`null` คือปกติ ไม่ใช่ข้อมูลไม่ครบ**
+  ///
+  /// `@unique` กันหนึ่งบัญชีผูกสองคน ซึ่งจะทำให้ `me()` ของฝั่งลูกค้าตอบไม่ได้ว่า
+  /// สัตว์ชุดไหนเป็นของเขา
+  ///
+  /// พนักงานจับคู่ทีหลังได้ (ผู้ใช้กำหนด 2026-09-01) — ลูกค้ามาหน้างานก่อน แล้วไป
+  /// สมัครทีหลัง เป็นลำดับที่เกิดบ่อยกว่าทางกลับ
+  petOwnerAccountId BigInt?          @unique @map("pet_owner_account_id")
+  petOwnerAccount   PetOwnerAccount? @relation(fields: [petOwnerAccountId], references: [id], onDelete: Restrict)
+
+  note String? @db.VarChar(2000)
+
+  pets         Pet[]
+  appointments Appointment[]
+  visits       Visit[]
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@index([phone])
+  @@index([name])
+  @@index([deletedAt])
+  @@map("owner")
+}
+
+/// เพศของสัตว์ — **แยกทำหมันออกจากเพศ**
+///
+/// `MALE_NEUTERED` เป็นค่าที่พบในระบบคลินิกหลายเจ้า แต่มันรวมสองข้อเท็จจริงไว้ในค่าเดียว
+/// แล้วคำถาม "สัตว์ตัวผู้มีกี่ตัว" ต้องนับสองค่า · ที่นี่เพศคือเพศ ส่วนทำหมันเป็น
+/// `Pet.isNeutered` ต่างหาก
+enum PetSex {
+  MALE
+  FEMALE
+  /// ยังไม่รู้ — ลูกสัตว์ที่ยังดูไม่ออก หรือเคสฉุกเฉินที่ยังไม่ได้ถาม
+  UNKNOWN
+
+  @@map("pet_sex")
+}
+
+/// ชนิดสัตว์ — หมา แมว กระต่าย
+///
+/// **เป็นตาราง ไม่ใช่ enum** — คลินิกรับสัตว์แปลกใหม่เพิ่มได้โดยไม่ต้อง migrate ฐาน ·
+/// ต่างจาก `PetSex` ที่ชุดค่าปิดตายจริง
+model Species {
+  id   BigInt @id @default(autoincrement())
+  name String @db.VarChar(100)
+
+  /// ลำดับที่ผู้ใช้ลากเอง · `null` = แถวที่ถูกลบ — ดู `DrugCategory.sortOrder`
+  sortOrder Int? @map("sort_order")
+
+  breeds Breed[]
+  pets   Pet[]
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@index([sortOrder])
+  @@index([deletedAt])
+  @@map("species")
+}
+
+/// สายพันธุ์ — **ผูกกับชนิด** เพราะ "ชิวาวา" เป็นพันธุ์ของหมาเท่านั้น
+///
+/// ชื่อพันธุ์ห้ามซ้ำ**ภายในชนิดเดียวกัน** ไม่ใช่ทั้งตาราง — "เปอร์เซีย" เป็นได้ทั้ง
+/// พันธุ์แมวและพันธุ์กระต่าย และมันคนละพันธุ์กัน
+model Breed {
+  id BigInt @id @default(autoincrement())
+
+  speciesId BigInt  @map("species_id")
+  species   Species @relation(fields: [speciesId], references: [id], onDelete: Restrict)
+
+  name String @db.VarChar(100)
+
+  pets Pet[]
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@index([speciesId])
+  @@index([deletedAt])
+  @@map("breed")
+}
+
+/// สัตว์เลี้ยงหนึ่งตัว
+model Pet {
+  id BigInt @id @default(autoincrement())
+
+  /// รหัสสัตว์ — เหมือน `Owner.code` คือ unique เต็มตาราง ห้ามเอากลับมาใช้ซ้ำ
+  code String @unique @db.VarChar(20)
+
+  /// **เจ้าของบังคับ** — สัตว์ที่ไม่มีเจ้าของคือแถวที่ไม่มีใครติดต่อได้
+  ///
+  /// เคสฉุกเฉินที่ยังไม่รู้เจ้าของ **ไม่สร้างแถวนี้** แต่เปิด `Visit` แบบไม่ผูกสัตว์
+  /// แทน แล้วค่อยผูกทีหลัง — ดู `Visit.petId`
+  ownerId BigInt @map("owner_id")
+  owner   Owner  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+
+  name String @db.VarChar(200)
+
+  speciesId BigInt  @map("species_id")
+  species   Species @relation(fields: [speciesId], references: [id], onDelete: Restrict)
+
+  /// สายพันธุ์ — ไม่บังคับ เพราะพันธุ์ผสมที่ตอบไม่ได้มีจริง
+  ///
+  /// ฐานบังคับว่าพันธุ์ที่เลือกต้องเป็นพันธุ์ของชนิดที่เลือก ด้วย FK คู่
+  /// `(breedId, speciesId)` → `breed(id, species_id)` — ดู `05-owner.sql` ·
+  /// ไม่งั้นจะบันทึกได้ว่าเป็น "แมวพันธุ์ชิวาวา"
+  breedId BigInt? @map("breed_id")
+  breed   Breed?  @relation(fields: [breedId], references: [id], onDelete: Restrict)
+
+  sex PetSex @default(UNKNOWN)
+
+  /// ทำหมันแล้วหรือยัง — **แยกจากเพศโดยตั้งใจ** ดู `PetSex`
+  ///
+  /// `null` = ยังไม่ได้ถาม ต่างจาก `false` ที่แปลว่าถามแล้วและยังไม่ทำ · หมอที่เห็น
+  /// `false` จะไม่ถามซ้ำ ส่วนที่เห็นค่าว่างจะถาม
+  isNeutered Boolean? @map("is_neutered")
+
+  /// วันเกิด — **เก็บวันเกิด ไม่ใช่อายุ**
+  ///
+  /// อายุที่เก็บเป็นตัวเลขจะผิดตั้งแต่วันถัดไป · ไม่บังคับ เพราะสัตว์รับเลี้ยงจำนวนมาก
+  /// ไม่มีใครรู้วันเกิด
+  bornOn DateTime? @map("born_on") @db.Date
+
+  /// น้ำหนักล่าสุด (กก.) — เก็บไว้เพื่อความสะดวก **ค่าจริงของแต่ละครั้งอยู่ที่ `Visit`**
+  ///
+  /// น้ำหนักเปลี่ยนทุกครั้งที่มา และขนาดยาคิดจากน้ำหนัก ณ วันที่จ่าย ไม่ใช่วันนี้ ·
+  /// ช่องนี้คือ "ล่าสุดที่ชั่งได้" ไว้ให้หน้าจอโชว์ ไม่ใช่แหล่งความจริงของใบสั่งยา
+  weightKg Decimal? @map("weight_kg") @db.Decimal(6, 2)
+
+  /// สีและตำหนิ — ใช้ยืนยันตัวสัตว์ตอนรับ-ส่ง
+  color String? @db.VarChar(200)
+
+  /// ไมโครชิป — ห้ามซ้ำเฉพาะแถวที่กรอกมาและยังไม่ถูกลบ (partial unique)
+  microchip String? @db.VarChar(50)
+
+  /// รูปสัตว์ — **ที่อยู่ไฟล์ ไม่ใช่ตัวไฟล์** (ผู้ใช้กำหนด 2026-09-01)
+  ///
+  /// เก็บเป็นที่อยู่สัมพัทธ์ใต้ `UPLOAD_DIR` เหมือนสลิป · เก็บไบต์ลงฐานทำให้ทุกคิวรี
+  /// ที่อ่านสัตว์ลากรูปมาด้วย และ backup โตขึ้นเป็นสิบเท่าโดยไม่ได้อะไรกลับมา
+  ///
+  /// **ไม่ส่ง path นี้ออกทาง API** — หน้าเว็บโหลดผ่าน `/photo` ที่มีการ์ด เหมือนสลิป
+  photoPath String? @map("photo_path") @db.VarChar(300)
+
+  /// ประวัติแพ้ยา — **ข้อความอิสระ ไม่ใช่ FK ไปตารางยา**
+  ///
+  /// สัตว์แพ้ตัวยา ไม่ได้แพ้ยี่ห้อ และเจ้าของเล่ามาว่า "แพ้ยาแก้อักเสบ" ซึ่งจับคู่กับ
+  /// แถวใน `drug` ไม่ได้ · บังคับให้เลือกจากลิสต์แปลว่าข้อมูลที่จับคู่ไม่ได้จะหายไป
+  /// ทั้งที่มันคือข้อมูลที่ช่วยชีวิต
+  allergyNote String? @map("allergy_note") @db.VarChar(2000)
+
+  note String? @db.VarChar(2000)
+
+  /// เสียชีวิตแล้ว — **ไม่ใช่การลบ**
+  ///
+  /// ประวัติการรักษายังต้องอยู่ และเจ้าของยังกลับมาถามได้ · แต่ไม่ควรโผล่ในช่องเลือก
+  /// สัตว์ตอนเปิดคิวใหม่ ซึ่งเป็นคนละเรื่องกับ `deletedAt` ที่แปลว่าแถวนี้กรอกผิด
+  deceasedOn DateTime? @map("deceased_on") @db.Date
+
+  appointments Appointment[]
+  visits       Visit[]
+
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy BigInt?   @map("deleted_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy BigInt    @map("created_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy BigInt    @map("updated_by")
+
+  @@index([ownerId])
+  @@index([speciesId])
+  @@index([breedId])
+  @@index([name])
+  @@index([deletedAt])
+  @@map("pet")
+}

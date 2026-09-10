@@ -1,0 +1,267 @@
+@import 'tailwindcss';
+
+/*
+ * **`dark:` ผูกกับคลาส `.dark` ไม่ใช่กับการตั้งค่าของเครื่อง**
+ *
+ * ค่าตั้งต้นของ Tailwind คือ `@media (prefers-color-scheme: dark)` · คอมโพเนนต์ที่ยกมา
+ * จาก PMK มีคลาส `dark:` อยู่เต็มไปหมด (เช่น `dark:bg-input/30` ที่ `input.tsx`)
+ * ไม่ประกาศบรรทัดนี้ คลาสพวกนั้นจะทำงานทันทีบนเครื่องที่ตั้งเป็นโหมดมืด แล้วช่องกรอก
+ * จะกลายเป็นพื้นเทาบนหน้าจอที่เป็นขาว (เจอเมื่อ 2026-08-31)
+ *
+ * ระบบนี้ไม่มีใครใส่คลาส `.dark` ให้ `<html>` เลย · เงื่อนไขจึงเป็นเท็จเสมอ
+ * และคลาส `dark:` ทั้งหมดถูกปิดตายไปพร้อมกัน ซึ่งเป็นสิ่งที่ต้องการ
+ */
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * โทเคนของหน้าตาทั้งระบบอยู่ที่นี่ที่เดียว
+ *
+ * หน้าจอเรียกโทเคน (`bg-background`, `text-muted-foreground`) ไม่เรียกสีตรง ๆ
+ * — สีที่พิมพ์ลงในคอมโพเนนต์คือสีที่ไม่มีใครหาเจอตอนแบรนด์เปลี่ยน
+ * รายละเอียดและข้อห้ามอยู่ที่ `docs/standards/ui-design.md`
+ *
+ * โครงยกมาจากระบบก่อนหน้า (PMK) ทั้งชุด · **เปลี่ยนอย่างเดียวคือสีแบรนด์: แดง → ฟ้า**
+ * ที่เหลือ — เทากลาง พื้นขาว รูปทรง scrollbar — เหมือนเดิมทุกค่า
+ */
+
+@theme inline {
+  --font-sans: var(--font-sarabun);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-strong: var(--primary-strong);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-footer: var(--footer);
+  --color-footer-foreground: var(--footer-foreground);
+  --color-footer-border: var(--footer-border);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+:root {
+  /*
+   * ฟ้าสดใส Paw Soft `#1ca9fc` คือสีหลัก (ผู้ใช้เลือก 2026-08-31)
+   *
+   * แทนที่แดง PMK `oklch(0.54 0.22 25)` ในตำแหน่งเดิมทุกที่
+   *
+   * **สว่างกว่าแดง PMK มาก** (`L 0.705` เทียบ `0.54`) ซึ่งมีผลสองข้อ — ดูที่
+   * `--primary-foreground` กับ `--primary-strong` ข้างล่าง
+   *
+   * **สีนี้ใช้เป็นตัวอักษรหรือไอคอนบนพื้นขาวไม่ได้** (`2.58:1`)
+   * ของพวกนั้นใช้ `--primary-strong` ที่เป็นฟ้าเข้มของ hue เดียวกันแทน — ดู `///`
+   * ข้างล่าง · เขียน `text-primary` บนพื้นขาวเมื่อไหร่ คือข้อความที่คนสายตาไม่ดีอ่านไม่ออก
+   *
+   * **ไม่มีโหมดมืด และตั้งใจไม่มี** (ผู้ใช้ตัดสิน 2026-08-31) · เคยมี
+   * `@media (prefers-color-scheme: dark)` อยู่ แล้วคนที่ตั้งเครื่องเป็นโหมดมืดไม่เคย
+   * เห็นสีที่ออกแบบไว้เลย — เปิดมาเจอพื้นดำ ทั้งที่สิ่งที่สั่งคือพื้นขาว · อยากได้
+   * เมื่อไหร่ให้ทำเป็นสวิตช์ที่ผู้ใช้กดเอง ไม่ใช่เปลี่ยนตามเครื่อง
+   */
+  color-scheme: light;
+
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+
+  /* ← จุดที่เปลี่ยนจาก PMK: แดงเข้ม 25° เป็นฟ้าสดใส 242.6° */
+  --primary: oklch(0.705 0.163 242.6);
+
+  /*
+   * **ขาว — และมันตกมาตรฐาน WCAG AA ที่ `2.58:1` (ต้อง `4.5:1`)**
+   *
+   * ผู้ใช้ตัดสินเมื่อ 2026-08-31 หลังเห็นตัวเลขแล้ว · เลือกหน้าตาที่ต้องการ
+   * โดยรู้ว่าแลกกับอะไร — ไม่ใช่ค่าที่หลุดมาโดยไม่มีใครวัด
+   *
+   * **ผลจริงที่จะเกิด:** คนสายตาเลือนราง คนที่อ่านกลางแดด และจอที่ปรับความสว่างต่ำ
+   * จะอ่านตัวหนังสือบนปุ่มไม่ออก · ปุ่มยังเห็นว่าเป็นปุ่ม แต่ไม่รู้ว่าปุ่มอะไร
+   *
+   * วันที่อยากให้ผ่านมาตรฐานโดยคงตัวอักษรขาว: เปลี่ยน `--primary` เป็น
+   * `oklch(0.62 0.17 242.6)` (`#0086d9`) — โทนเดียวกัน เข้มขึ้นพอได้ `4.52:1`
+   */
+  --primary-foreground: oklch(1 0 0);
+
+  /*
+   * ฟ้าเข้มของ hue เดียวกัน — **สำหรับตัวอักษรกับไอคอนบนพื้นขาว**
+   *
+   * `--primary` สว่างเกินกว่าจะอ่านออกบนขาว (2.58:1) · ตัวนี้ได้ 5.44:1 · เป็นสีเดียวกัน
+   * ในสายตา แค่เข้มพอให้ใช้เป็นตัวหนังสือได้
+   *
+   * ใช้กับ: ลิงก์ · ไอคอนที่ต้องเด่น · ตัวเลขสรุปที่เน้น · **ไม่ใช้เป็นพื้นปุ่ม**
+   */
+  --primary-strong: oklch(0.52 0.145 242.6);
+
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+
+  /*
+   * แดงของการลบ — **คนละตัวกับสีแบรนด์ และตอนนี้คนละสีไปเลย**
+   *
+   * ตอนแบรนด์เป็นแดง สองตัวนี้ต้องตั้งใจแยกเฉดกันไม่ให้ปุ่มลบดูเหมือนปุ่มหลัก ·
+   * พอแบรนด์เป็นฟ้า ปัญหานั้นหายไปเอง แต่โทเคนยังต้องแยกกันอยู่ดี เพราะมันตอบ
+   * คนละคำถาม: อันหนึ่งคือ "กดตรงนี้" อีกอันคือ "ระวัง"
+   */
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(1 0 0);
+
+  /* เขียวของการบันทึก · เหลืองของการรอ — สถานะ ไม่ใช่แบรนด์ */
+  --success: oklch(0.53 0.13 150);
+  --success-foreground: oklch(1 0 0);
+  --warning: oklch(0.56 0.13 75);
+  --warning-foreground: oklch(1 0 0);
+
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  /* วงโฟกัสต้องเห็นบนพื้นขาว — ฟ้าสดใสจางเกินไป ใช้ตัวเข้มแทน */
+  --ring: oklch(0.52 0.145 242.6);
+
+  /*
+   * แถบท้ายที่เป็นพื้นเข้ม — ตัดกับหน้าขาวเพื่อบอกว่าจบเนื้อหาแล้ว
+   *
+   * ไม่ใช่ `muted` เพราะ `muted` คือพื้นอ่อนที่กลืนไปกับหน้า · ตัวนี้ต้องตัดกัน
+   * และตัวอักษรบนมันต้องกลับด้าน จึงเป็นโทเคนของตัวเอง
+   */
+  --footer: oklch(0.45 0 0);
+  --footer-foreground: oklch(0.92 0 0);
+  --footer-border: oklch(0.62 0 0);
+
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.705 0.163 242.6);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+/*
+ * **`text-primary` ใช้ฟ้าเข้ม ไม่ใช่ฟ้าสดใส**
+ *
+ * `--primary` (`#1ca9fc`) เป็นสีของ**พื้น** ปุ่มกับแถบ · เอามาเป็นตัวหนังสือบนพื้นขาว
+ * ได้แค่ `2.58:1` ซึ่งอ่านไม่ออก
+ *
+ * มีอยู่สิบกว่าที่ในคอมโพเนนต์ที่ยกมาจาก PMK ที่เขียน `text-primary` ไว้ (ไอคอนค้นหา ·
+ * แถวที่เลือกใน combobox · หัวคอลัมน์ที่กำลังเรียง · แท็บที่ active) · ตอนแบรนด์เป็น
+ * แดงเข้มมันอ่านออกหมด พอเปลี่ยนเป็นฟ้าสว่างก็จางไปพร้อมกันทั้งหมด
+ *
+ * แทนที่จะไล่แก้ทีละที่ — และพลาดที่ใดที่หนึ่งแน่ ๆ — ให้คลาสนี้ชี้ไปที่ตัวเข้มเลย ·
+ * `bg-primary` ยังเป็นฟ้าสดใสตามเดิม ซึ่งเป็นสิ่งที่ต้องการ
+ */
+@layer utilities {
+  .text-primary {
+    color: var(--primary-strong);
+  }
+  .border-primary {
+    border-color: var(--primary-strong);
+  }
+}
+
+@layer base {
+  /**
+   * ของที่กดได้ต้องมีเคอร์เซอร์บอกว่ากดได้ (ผู้ใช้กำหนด 2026-09-01)
+   *
+   * `Button` ของ shadcn มี `cursor-pointer` มาอยู่แล้ว แต่ `<button>` เปล่า ๆ ที่เขียนเอง
+   * (ปุ่มเลือกสัตว์ · แถวในลิสต์ผลค้น · แท็บ) ไม่มี — Tailwind v4 ตั้ง `cursor: default`
+   * ให้ `button` ตามสเปกของเบราว์เซอร์ ผลคือปุ่มที่กดได้จริงดูเหมือนข้อความตาย
+   *
+   * แก้ที่ชั้น base ที่เดียว ไม่ใช่ไล่เติม `cursor-pointer` ทีละที่ — ที่ไล่เติมคือที่ที่
+   * วันหนึ่งจะมีคนลืม แล้วไม่มีอะไรจับได้
+   *
+   * `:disabled` ไม่รวม เพราะปุ่มที่กดไม่ได้ไม่ควรบอกว่ากดได้
+   */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  label[for],
+  summary,
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+
+  * {
+    @apply border-border;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'cv11', 'ss01';
+    /* `text-sm` เป็นขนาดของเนื้อหาทั่วไป — ดู ui-design.md */
+    font-size: 0.875rem;
+    line-height: 1.5rem;
+  }
+  html {
+    @apply font-sans;
+    /* จองที่ scrollbar ไว้เสมอ — เปิด dialog แล้ว scroll-lock จะได้ไม่ดันหน้าจอกระตุก */
+    scrollbar-gutter: stable;
+  }
+
+  /* วงโฟกัสต้องมองเห็นเสมอ — คนที่ใช้แป้นพิมพ์อย่างเดียวต้องรู้ว่าตอนนี้อยู่ตรงไหน */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+  }
+}
+
+/* ลูกศรขึ้นลงของ input[type=number] — ระบบนี้ใช้ปุ่มของตัวเองแทนทุกที่ */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
