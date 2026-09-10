@@ -39,6 +39,14 @@ export async function seedMaster(): Promise<MasterSeed> {
   const drugCat = await upsertDrugCategory('ยาปฏิชีวนะ')
   const drug = await upsertDrug('Amoxicillin 250', '12.50', 'เม็ด', drugCat)
 
+  // ---- ตำแหน่ง ----
+  // ไม่สังกัดแผนก (`departmentId: null`) — คลินิกที่เพิ่งเปิดใช้งานยังไม่มีแผนกเลย
+  // ตำแหน่งต้องเลือกได้ทันทีโดยไม่ต้องรอสร้างแผนกก่อน
+  await upsertPosition('สัตวแพทย์', 1, null)
+  await upsertPosition('ผู้ช่วยสัตวแพทย์', 2, null)
+  await upsertPosition('พนักงานเคาน์เตอร์', 3, null)
+  await upsertPosition('พนักงานบัญชี', 4, null)
+
   return {
     speciesCatId: cat,
     speciesDogId: dog,
@@ -52,6 +60,22 @@ async function upsertSpecies(name: string, sortOrder: number): Promise<bigint> {
   if (found) return found.id
 
   const row = await db.species.create({ data: { name, sortOrder, ...sys }, select: { id: true } })
+
+  return row.id
+}
+
+async function upsertPosition(
+  name: string,
+  sortOrder: number,
+  departmentId: bigint | null,
+): Promise<bigint> {
+  const found = await db.position.findFirst({ where: { name, deletedAt: null }, select: { id: true } })
+  if (found) return found.id
+
+  const row = await db.position.create({
+    data: { name, sortOrder, departmentId, ...sys },
+    select: { id: true },
+  })
 
   return row.id
 }
