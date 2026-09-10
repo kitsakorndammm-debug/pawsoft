@@ -14,14 +14,16 @@ import { useDepartmentOptions } from '@/features/department/hooks'
 const NAME_MAX = 200
 
 /**
- * แผนก เป็นช่องบังคับ — BE ปฏิเสธค่าที่ชี้ไปยังแม่ที่ไม่มีอยู่
- * ปล่อยว่างได้แปลว่าผู้ใช้กดบันทึกแล้วเจอข้อความปฏิเสธ ทั้งที่หน้าจอรู้อยู่แล้ว
+ * แผนก **ไม่บังคับ** — BE รับ `departmentId: null` ได้ตรง ๆ (`requireDepartment`
+ * คืนผ่านทันทีเมื่อเป็น `null`) ตำแหน่งที่ยังไม่สังกัดแผนกไหนจึงมีอยู่จริงในระบบ
  *
- * เก็บเป็น string เพราะ `<select>` คืน string เสมอ · แปลงเป็น number ตอนส่ง
+ * ฟอร์มที่บังคับมากกว่า BE คือฟอร์มที่ปฏิเสธข้อมูลที่ระบบรับได้ — เกิดจริงเมื่อทะเบียน
+ * แผนกยังว่างอยู่ (คลินิกเพิ่งเปิดใช้งาน): ห้ามเพิ่มตำแหน่งจนกว่าจะมีแผนกก่อน
+ * ทั้งที่ไม่มีอะไรบังคับให้ตำแหน่งต้องสังกัดแผนก
  */
 const schema = z.object({
   name: z.string().trim().min(1, 'กรอกชื่อตำแหน่ง').max(NAME_MAX, `ยาวเกิน ${NAME_MAX} ตัวอักษร`),
-  departmentId: z.number({ message: 'เลือกแผนก' }),
+  departmentId: z.number().nullable(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -75,8 +77,7 @@ export function PositionDialog({
       schema={schema}
       defaultValues={{
         name: row?.name ?? '',
-        // combobox เก็บเป็น number — ไม่ต้องแปลงกลับตอนส่ง ต่างจาก `<select>` ที่คืน string
-        departmentId: row?.departmentId as number,
+        departmentId: row?.departmentId ?? null,
       }}
       onSubmit={handleSubmit}
       formKey={row?.id ?? 'new'}
@@ -96,14 +97,13 @@ export function PositionDialog({
             <Input {...form.register('name')} disabled={pending} autoFocus={!readOnly} />
           </AppFormField>
 
-          <AppFormField name="departmentId" label="แผนก" required={!readOnly}>
+          <AppFormField name="departmentId" label="แผนก">
             <ComboboxField
               name="departmentId"
               options={parents.data ?? []}
-              placeholder="เลือกแผนก"
+              placeholder="เลือกแผนก (ไม่บังคับ)"
               disabled={pending}
               readOnly={readOnly}
-              required
               loading={parents.isPending}
             />
           </AppFormField>
