@@ -1,5 +1,11 @@
 import { db } from '../../src/kit/db.ts'
 import { SYSTEM_USER_ID } from '../../src/kit/actor.ts'
+import {
+  BILLING_PERMISSION,
+  MASTER_PERMISSION,
+  MEDICAL_PERMISSION,
+  RECEPTION_PERMISSION,
+} from '../../src/kit/permissions.ts'
 
 /**
  * ข้อมูลหลักขั้นต่ำที่ทุกอย่างต้องมีถึงจะทำงานได้
@@ -47,6 +53,25 @@ export async function seedMaster(): Promise<MasterSeed> {
   await upsertPosition('พนักงานเคาน์เตอร์', 3, null)
   await upsertPosition('พนักงานบัญชี', 4, null)
 
+  // ---- บทบาท ----
+  // ชุดสิทธิ์คลินิกทั่วไป — อ้างชุดเดียวกับที่ `seed-e2e-db.ts` ใช้พิสูจน์กฎ
+  // `invoice_verifier_not_submitter_check` และ `main:medical:write` (เหตุผลของแต่ละ
+  // key อยู่ที่นั่น) เพื่อให้แอดมินมีบทบาทให้เลือกตั้งแต่วันแรก ไม่ต้องไล่ติ๊กเอง
+  await upsertRole('พนักงานเคาน์เตอร์', [
+    RECEPTION_PERMISSION.read,
+    RECEPTION_PERMISSION.write,
+    BILLING_PERMISSION.read,
+    BILLING_PERMISSION.collect,
+    MASTER_PERMISSION.read,
+  ])
+  await upsertRole('สัตวแพทย์', [
+    RECEPTION_PERMISSION.read,
+    RECEPTION_PERMISSION.write,
+    MEDICAL_PERMISSION.write,
+    MASTER_PERMISSION.read,
+  ])
+  await upsertRole('พนักงานบัญชี', [BILLING_PERMISSION.read, BILLING_PERMISSION.verify])
+
   return {
     speciesCatId: cat,
     speciesDogId: dog,
@@ -62,6 +87,26 @@ async function upsertSpecies(name: string, sortOrder: number): Promise<bigint> {
   const row = await db.species.create({ data: { name, sortOrder, ...sys }, select: { id: true } })
 
   return row.id
+}
+
+/**
+ * บทบาท + สิทธิ์ของมัน — ตั้งสิทธิ์ใหม่ทุกครั้งที่รัน ไม่สะสมของเก่า
+ *
+ * รันซ้ำแล้วสิทธิ์ต้องตรงกับที่ประกาศไว้ในโค้ดนี้เป๊ะ ไม่ใช่ผลรวมของทุกครั้งที่เคยรัน
+ */
+async function upsertRole(name: string, keys: readonly string[]): Promise<bigint> {
+  const existing = await db.role.findFirst({ where: { name, deletedAt: null }, select: { id: true } })
+  const roleId = existing?.id ?? (await db.role.create({ data: { name, ...sys }, select: { id: true } })).id
+
+  const rows = await db.permission.findMany({ where: { key: { in: [...keys] } }, select: { id: true } })
+
+  await db.rolePermission.deleteMany({ where: { roleId } })
+  await db.rolePermission.createMany({
+    data: rows.map((r) => ({ roleId, permissionId: r.id, createdBy: SYSTEM_USER_ID })),
+    skipDuplicates: true,
+  })
+
+  return roleId
 }
 
 async function upsertPosition(
