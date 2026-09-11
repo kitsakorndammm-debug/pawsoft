@@ -70,7 +70,19 @@ export async function seedMaster(): Promise<MasterSeed> {
   // ---- บริการ ----
   const svcCat = await upsertServiceCategory('ตรวจรักษาทั่วไป')
   const svc = await upsertServiceItem('ตรวจร่างกายทั่วไป', '300.00', svcCat)
-  await upsertServiceItem('ฉีดวัคซีนรวม', '450.00', svcCat)
+  await upsertServiceItem('ตรวจเลือด', '600.00', svcCat)
+  await upsertServiceItem('ตรวจอุจจาระ', '200.00', svcCat)
+  await upsertServiceItem('เอกซเรย์', '800.00', svcCat)
+
+  const vaccineCat = await upsertServiceCategory('วัคซีนและป้องกันโรค')
+  await upsertServiceItem('ฉีดวัคซีนรวม', '450.00', vaccineCat)
+  await upsertServiceItem('ฉีดวัคซีนพิษสุนัขบ้า', '250.00', vaccineCat)
+  await upsertServiceItem('ถ่ายพยาธิ', '150.00', vaccineCat)
+  await upsertServiceItem('หยอดยากำจัดเห็บหมัด', '200.00', vaccineCat)
+
+  const surgeryCat = await upsertServiceCategory('ทันตกรรมและศัลยกรรม')
+  await upsertServiceItem('ขูดหินปูน', '1500.00', surgeryCat)
+  await upsertServiceItem('ทำหมัน', '2500.00', surgeryCat)
 
   // ---- ยา ----
   // ชื่อสามัญ + วงเล็บชื่อการค้าที่รู้จักทั่วไป (เช่น "Praziquantel (Drontal)") —
