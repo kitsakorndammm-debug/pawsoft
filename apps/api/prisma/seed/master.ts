@@ -32,9 +32,40 @@ export async function seedMaster(): Promise<MasterSeed> {
   const cat = await upsertSpecies('แมว', 1)
   const dog = await upsertSpecies('สุนัข', 2)
 
+  // สายพันธุ์ไทยแท้ก่อน แล้วตามด้วยสายพันธุ์สากลที่พบบ่อย ปิดท้ายด้วย "พันธุ์ผสม"
+  // ซึ่งเป็นตัวเลือกที่ใช้จริงบ่อยที่สุด (แมว/หมาที่มาส่วนใหญ่ไม่มีสายพันธุ์แท้)
   await upsertBreed('เปอร์เซีย', cat)
   await upsertBreed('ไทยบ้าน', cat)
+  await upsertBreed('วิเชียรมาศ', cat)
+  await upsertBreed('โคราช (สีสวาด)', cat)
+  await upsertBreed('ขาวมณี', cat)
+  await upsertBreed('ศุภลักษณ์', cat)
+  await upsertBreed('สยาม', cat)
+  await upsertBreed('สก็อตติชโฟลด์', cat)
+  await upsertBreed('อเมริกันชอร์ตแฮร์', cat)
+  await upsertBreed('บริติชชอร์ตแฮร์', cat)
+  await upsertBreed('เมนคูน', cat)
+  await upsertBreed('แร็กดอลล์', cat)
+  await upsertBreed('สฟิงซ์', cat)
+  await upsertBreed('เบงกอล', cat)
+  await upsertBreed('รัสเซียนบลู', cat)
+  await upsertBreed('เอ็กโซติกชอร์ตแฮร์', cat)
+  await upsertBreed('อบิสซิเนียน', cat)
+  await upsertBreed('เบอร์แมน', cat)
+  await upsertBreed('นอร์วีเจียนฟอเรสต์', cat)
+  await upsertBreed('แมวพันธุ์ผสม', cat)
+
+  await upsertBreed('ไทยหลังอาน', dog)
+  await upsertBreed('บางแก้ว', dog)
   await upsertBreed('โกลเด้น รีทรีฟเวอร์', dog)
+  await upsertBreed('ลาบราดอร์ รีทรีฟเวอร์', dog)
+  await upsertBreed('ปอมเมอเรเนียน', dog)
+  await upsertBreed('ชิวาวา', dog)
+  await upsertBreed('พุดเดิ้ล', dog)
+  await upsertBreed('บีเกิ้ล', dog)
+  await upsertBreed('ชิสุ', dog)
+  await upsertBreed('ปั๊ก', dog)
+  await upsertBreed('สุนัขพันธุ์ผสม', dog)
 
   // ---- บริการ ----
   const svcCat = await upsertServiceCategory('ตรวจรักษาทั่วไป')
@@ -42,8 +73,32 @@ export async function seedMaster(): Promise<MasterSeed> {
   await upsertServiceItem('ฉีดวัคซีนรวม', '450.00', svcCat)
 
   // ---- ยา ----
+  // ชื่อสามัญ + วงเล็บชื่อการค้าที่รู้จักทั่วไป (เช่น "Praziquantel (Drontal)") —
+  // พนักงานเรียกยาด้วยชื่อการค้าจริงในคลินิก แต่ชื่อสามัญคือตัวที่บอกว่ามันคือยาอะไร
   const drugCat = await upsertDrugCategory('ยาปฏิชีวนะ')
   const drug = await upsertDrug('Amoxicillin 250', '12.50', 'เม็ด', drugCat)
+  await upsertDrug('Cephalexin 250', '10.00', 'เม็ด', drugCat)
+  await upsertDrug('Doxycycline 100', '8.50', 'เม็ด', drugCat)
+  await upsertDrug('Cefovecin (Convenia)', '850.00', 'ขวด', drugCat)
+
+  const painCat = await upsertDrugCategory('ยาแก้ปวด-ลดการอักเสบ')
+  await upsertDrug('Meloxicam (Metacam)', '450.00', 'ขวด', painCat)
+  await upsertDrug('Tolfedine 6mg', '9.00', 'เม็ด', painCat)
+  await upsertDrug('Tramadol 50', '15.00', 'เม็ด', painCat)
+  await upsertDrug('Prednisolone 5', '8.00', 'เม็ด', painCat)
+
+  const dewormCat = await upsertDrugCategory('ยาถ่ายพยาธิ-กำจัดเห็บหมัด')
+  await upsertDrug('Praziquantel (Drontal)', '25.00', 'เม็ด', dewormCat)
+  await upsertDrug('Fenbendazole (Panacur)', '60.00', 'ซอง', dewormCat)
+  await upsertDrug('Ivermectin (Heartgard)', '120.00', 'เม็ด', dewormCat)
+  await upsertDrug('Bravecto', '650.00', 'เม็ด', dewormCat)
+
+  const supplementCat = await upsertDrugCategory('ยาบำรุง-วิตามิน')
+  await upsertDrug('วิตามินรวม', '5.00', 'เม็ด', supplementCat)
+  await upsertDrug('แคลเซียมเสริม', '6.00', 'เม็ด', supplementCat)
+
+  const giCat = await upsertDrugCategory('ยาระบบทางเดินอาหาร')
+  await upsertDrug('Omeprazole 20', '12.00', 'แคปซูล', giCat)
 
   // ---- ตำแหน่ง ----
   // ไม่สังกัดแผนก (`departmentId: null`) — คลินิกที่เพิ่งเปิดใช้งานยังไม่มีแผนกเลย
