@@ -79,22 +79,36 @@ export function AppointmentMonthView({
                   type="button"
                   onClick={() => onSelectDay(day)}
                   className={cn(
-                    'flex h-full flex-col items-center justify-center gap-1.5 rounded-lg border p-2 transition-colors hover:border-primary hover:bg-primary/5',
+                    'flex h-full flex-col items-stretch gap-1 rounded-lg border p-2 text-left transition-colors hover:border-primary hover:bg-primary/5',
                     !inMonth && 'opacity-40',
                     isToday && 'border-primary ring-1 ring-primary/40',
                   )}
                 >
-                  <span className="text-base font-semibold">{dayOfMonth(day)}</span>
-                  {count > 0 ? (
-                    <span
-                      className={cn(
-                        'rounded px-2 py-0.5 text-xs font-medium',
-                        isPending ? 'bg-muted text-muted-foreground' : fullnessBadgeClassName(count, capacity),
-                      )}
-                    >
-                      {isPending ? '…' : count}
-                    </span>
-                  ) : null}
+                  <span
+                    className={cn(
+                      'self-start text-sm font-semibold',
+                      isToday && 'text-primary-strong',
+                    )}
+                  >
+                    {dayOfMonth(day)}
+                  </span>
+
+                  <div className="flex flex-1 items-center justify-center">
+                    {isPending ? (
+                      <span className="text-xs text-muted-foreground">…</span>
+                    ) : count > 0 ? (
+                      <span
+                        className={cn(
+                          'rounded px-2 py-1 text-sm font-semibold',
+                          fullnessBadgeClassName(count, capacity),
+                        )}
+                      >
+                        {count} คิว
+                      </span>
+                    ) : inMonth ? (
+                      <span className="text-xs text-muted-foreground/70">ว่าง</span>
+                    ) : null}
+                  </div>
                 </button>
               )
             })}
