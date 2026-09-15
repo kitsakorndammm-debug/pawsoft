@@ -5,10 +5,12 @@ import {
   Briefcase,
   Building2,
   IdCard,
+  Menu,
   Pill,
   ShieldCheck,
   Stethoscope,
   Warehouse,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -101,7 +103,16 @@ export const SETTINGS_PERMISSION_KEYS: readonly string[] = [
   ...new Set(SETTINGS_GROUPS.flatMap((g) => g.items.map((i) => i.permission))),
 ]
 
-function SiderLink({ item, pathname }: { item: SiderItem; pathname: string }) {
+function SiderLink({
+  item,
+  pathname,
+  onNavigate,
+}: {
+  item: SiderItem
+  pathname: string
+  /** ปิดลิ้นชักเมนูบนจอแคบเมื่อกดลิงก์ — ไม่มีผลบนจอกว้างที่ไซด์บาร์เปิดค้างอยู่แล้ว */
+  onNavigate: () => void
+}) {
   const allowed = useCan(item.permission)
   if (!allowed) return null
 
@@ -110,6 +121,7 @@ function SiderLink({ item, pathname }: { item: SiderItem; pathname: string }) {
   return (
     <Link
       href={item.href}
+      onClick={onNavigate}
       aria-current={isActive ? 'page' : undefined}
       className={cn(
         'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
@@ -128,10 +140,12 @@ function SiderGroupBlock({
   group,
   pathname,
   term,
+  onNavigate,
 }: {
   group: SiderGroup
   pathname: string
   term: string
+  onNavigate: () => void
 }) {
   /**
    * **หัวข้อกลุ่มหายไปด้วยเมื่อไม่มีอะไรอยู่ข้างใต้**
@@ -155,12 +169,21 @@ function SiderGroupBlock({
         {group.label}
       </span>
       {matched.map((item) => (
-        <SiderLink key={item.href} item={item} pathname={pathname} />
+        <SiderLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
       ))}
     </div>
   )
 }
 
+/**
+ * **จอแคบ: ไซด์บาร์นี้ไม่มีที่พอให้อยู่ค้างเหมือนจอคอม** (แก้ 2026-09-15)
+ *
+ * 200px คงที่บนจอมือถือกว้าง ~390px กินไปครึ่งหน้าจอ เหลือที่ให้ตารางแค่ ~190px
+ * จนชื่อยา/ชื่อคนถูกตัดจนอ่านไม่รู้เรื่อง — ใต้ `lg` จึงซ่อนเป็นลิ้นชักที่เลื่อนออกมา
+ * ทับเนื้อหาแทนที่จะเบียดพื้นที่ถาวร กดปุ่มลอยมุมล่างซ้ายเพื่อเปิด
+ *
+ * `lg:static lg:translate-x-0` คืนพฤติกรรมเดิมทั้งหมดที่จอกว้าง — ไม่กระทบเดสก์ท็อป
+ */
 export function AppSider() {
   const pathname = usePathname()
 
@@ -171,6 +194,7 @@ export function AppSider() {
    * `?q=` ของหน้าปลายทาง · ผลพลอยได้คือไม่ต้องห่อ `Suspense`
    */
   const [term, setTerm] = useState('')
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   if (!pathname?.startsWith(ROUTE_SETTINGS)) return null
 
@@ -180,9 +204,45 @@ export function AppSider() {
   )
 
   return (
-    <aside className="flex w-[200px] shrink-0 flex-col gap-3 overflow-y-auto border-r bg-sidebar p-3">
-      <div className="flex flex-col gap-2">
-        <span className="px-1 text-sm font-semibold">จัดการข้อมูลหลัก</span>
+    <>
+      <button
+        type="button"
+        onClick={() => setMobileOpen(true)}
+        aria-label="เปิดเมนูข้อมูลหลัก"
+        title="เมนูข้อมูลหลัก"
+        className="fixed bottom-4 left-4 z-40 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg lg:hidden"
+      >
+        <Menu className="size-5" />
+      </button>
+
+      {/* ฉากหลังตอนลิ้นชักเปิด — แตะเพื่อปิด · ไม่มีผลที่จอกว้างเพราะลิ้นชักไม่ได้ใช้ตรงนั้น */}
+      {mobileOpen ? (
+        <div
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+        />
+      ) : null}
+
+      <aside
+        className={cn(
+          'flex w-[240px] shrink-0 flex-col gap-3 overflow-y-auto border-r bg-sidebar p-3 transition-transform duration-200',
+          'fixed inset-y-0 left-0 z-50 lg:static lg:w-[200px] lg:translate-x-0',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="px-1 text-sm font-semibold">จัดการข้อมูลหลัก</span>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="ปิดเมนู"
+            className="rounded-md p-1 text-muted-foreground hover:bg-primary/10 lg:hidden"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
         <SearchInput
           value={term}
           onChange={setTerm}
@@ -190,22 +250,23 @@ export function AppSider() {
           aria-label="ค้นหาเมนูข้อมูลหลัก"
           clearLabel="ล้างคำค้น"
         />
-      </div>
 
-      {anyVisible ? (
-        <nav className="flex flex-col gap-3">
-          {SETTINGS_GROUPS.map((group) => (
-            <SiderGroupBlock
-              key={group.label}
-              group={group}
-              pathname={pathname}
-              term={needle}
-            />
-          ))}
-        </nav>
-      ) : (
-        <p className="px-2 text-xs text-muted-foreground">ไม่พบเมนูที่ค้นหา</p>
-      )}
-    </aside>
+        {anyVisible ? (
+          <nav className="flex flex-col gap-3">
+            {SETTINGS_GROUPS.map((group) => (
+              <SiderGroupBlock
+                key={group.label}
+                group={group}
+                pathname={pathname}
+                term={needle}
+                onNavigate={() => setMobileOpen(false)}
+              />
+            ))}
+          </nav>
+        ) : (
+          <p className="px-2 text-xs text-muted-foreground">ไม่พบเมนูที่ค้นหา</p>
+        )}
+      </aside>
+    </>
   )
 }

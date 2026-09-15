@@ -110,7 +110,7 @@ function NavTab({ item, pathname }: { item: NavItem; pathname: string }) {
        * ตัวเองอยู่หน้าไหน · พื้นสีทึบอ่านออกทันทีจากระยะไกล และไอคอนได้สีตามไปด้วย
        */
       className={cn(
-        'relative my-1.5 flex items-center gap-1.5 rounded-lg px-3 text-sm transition-all',
+        'relative my-1.5 flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-all',
         isActive
           ? 'bg-primary font-semibold text-primary-foreground shadow-sm'
           : 'text-muted-foreground hover:bg-primary/10 hover:text-primary-strong',
@@ -126,7 +126,14 @@ export function AppNavbar() {
   const pathname = usePathname() ?? ''
 
   return (
-    <nav className="flex h-12 shrink-0 items-stretch justify-center gap-1 border-b bg-background px-2 shadow-sm">
+    /**
+     * **เลื่อนแนวนอนได้ ไม่ใช่บีบให้ตัวหนังสือตกบรรทัด** (แก้ 2026-09-15) — จอแคบกว่า
+     * ผลรวมความกว้างของทุกแท็บมีอยู่จริง (มือถือ) `justify-center` เฉยๆ ทำให้แท็บ
+     * แรกๆ โดนเบียดจนตัวอักษรตัดบรรทัดกลางคำ อ่านไม่รู้เรื่อง · เลื่อนดูแท็บที่เหลือได้
+     * แทน · `justify-start` บนจอแคบกัน bug ของ flexbox ที่ `justify-center` ร่วมกับ
+     * `overflow-x-auto` จะซ่อนเนื้อหาส่วนแรกไปเลื่อนกลับมาไม่ได้ในบางเบราว์เซอร์
+     */
+    <nav className="flex h-12 shrink-0 items-stretch justify-start gap-1 overflow-x-auto border-b bg-background px-2 shadow-sm sm:justify-center">
       {NAV_ITEMS.map((item) => (
         <NavTab key={item.href} item={item} pathname={pathname} />
       ))}

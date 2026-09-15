@@ -28,8 +28,13 @@ export function ListToolbar({
   actions?: ReactNode
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2">
-      <div className="relative w-56">
+    /**
+     * **จอแคบ: ช่องค้นเต็มแถว ปุ่มตกลงแถวถัดไป** (แก้ 2026-09-15) — เดิมช่องค้น
+     * กว้างคงที่ 224px บวกปุ่มที่มีข้อความยาว (เช่น "บันทึกการเคลื่อนไหว") เกิน 390px
+     * ของจอมือถือ ทำให้ปุ่มถูกตัดขอบขวาหายไปเลย ไม่ใช่แค่ล้นแบบที่เลื่อนดูได้
+     */
+    <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <div className="relative w-full sm:w-56">
         <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={search}
@@ -40,7 +45,7 @@ export function ListToolbar({
         />
       </div>
 
-      <div className="flex-1" />
+      <div className="hidden flex-1 sm:block" />
 
       {actions}
     </div>
