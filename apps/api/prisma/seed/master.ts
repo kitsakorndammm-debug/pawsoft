@@ -112,13 +112,18 @@ export async function seedMaster(): Promise<MasterSeed> {
   const giCat = await upsertDrugCategory('ยาระบบทางเดินอาหาร')
   await upsertDrug('Omeprazole 20', '12.00', 'แคปซูล', giCat)
 
+  // ---- แผนก ----
+  const deptVet = await upsertDepartment('แผนกสัตวแพทย์', 1)
+  const deptFront = await upsertDepartment('แผนกต้อนรับ', 2)
+  const deptAccount = await upsertDepartment('แผนกบัญชี', 3)
+
   // ---- ตำแหน่ง ----
-  // ไม่สังกัดแผนก (`departmentId: null`) — คลินิกที่เพิ่งเปิดใช้งานยังไม่มีแผนกเลย
-  // ตำแหน่งต้องเลือกได้ทันทีโดยไม่ต้องรอสร้างแผนกก่อน
-  await upsertPosition('สัตวแพทย์', 1, null)
-  await upsertPosition('ผู้ช่วยสัตวแพทย์', 2, null)
-  await upsertPosition('พนักงานเคาน์เตอร์', 3, null)
-  await upsertPosition('พนักงานบัญชี', 4, null)
+  // สังกัดแผนกให้ตรงกับบทบาทที่ตำแหน่งนั้นมักถือ — "แผนก" ยังไม่บังคับเลือก
+  // (`docs/standards/web-conventions.md`) จึงไม่กระทบตำแหน่งที่คลินิกอื่นไม่อยากสังกัดแผนก
+  await upsertPosition('สัตวแพทย์', 1, deptVet)
+  await upsertPosition('ผู้ช่วยสัตวแพทย์', 2, deptVet)
+  await upsertPosition('พนักงานเคาน์เตอร์', 3, deptFront)
+  await upsertPosition('พนักงานบัญชี', 4, deptAccount)
 
   // ---- บทบาท ----
   // ชุดสิทธิ์คลินิกทั่วไป — อ้างชุดเดียวกับที่ `seed-e2e-db.ts` ใช้พิสูจน์กฎ
@@ -145,6 +150,15 @@ export async function seedMaster(): Promise<MasterSeed> {
     serviceItemId: svc,
     drugId: drug,
   }
+}
+
+async function upsertDepartment(name: string, sortOrder: number): Promise<bigint> {
+  const found = await db.department.findFirst({ where: { name, deletedAt: null }, select: { id: true } })
+  if (found) return found.id
+
+  const row = await db.department.create({ data: { name, sortOrder, ...sys }, select: { id: true } })
+
+  return row.id
 }
 
 async function upsertSpecies(name: string, sortOrder: number): Promise<bigint> {
