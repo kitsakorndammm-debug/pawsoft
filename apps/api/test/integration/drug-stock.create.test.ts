@@ -152,6 +152,48 @@ describe('สต็อกยา · บันทึกรับเข้า/ป�
     }
   })
 
+  test('รับเข้าพร้อมวันหมดอายุ → บันทึกได้ เก็บวันหมดอายุไว้', async () => {
+    const drug = await makeDrug('RECEIVE-EXPIRES')
+
+    const created = await createDrugStockMovement(
+      { drugId: drug.id, type: 'RECEIVE', quantity: '10', expiresOn: '2027-06-30' },
+      SYSTEM_USER_ID,
+    )
+
+    expect(created.expiresOn?.toISOString().slice(0, 10)).toBe('2027-06-30')
+  })
+
+  test('ปรับยอดพร้อมวันหมดอายุ → ปฏิเสธ (ใส่ได้เฉพาะตอนรับเข้า)', async () => {
+    const drug = await makeDrug('ADJUST-EXPIRES-BLOCKED')
+    await createDrugStockMovement({ drugId: drug.id, type: 'RECEIVE', quantity: '10' }, SYSTEM_USER_ID)
+    expect.assertions(2)
+
+    try {
+      await createDrugStockMovement(
+        { drugId: drug.id, type: 'ADJUST', quantity: '-1', reason: 'ทดสอบ', expiresOn: '2027-06-30' },
+        SYSTEM_USER_ID,
+      )
+    } catch (e) {
+      expect(isAppError(e)).toBe(true)
+      expect(isAppError(e) && e.code).toBe('INVALID')
+    }
+  })
+
+  test('รับเข้าด้วยวันหมดอายุรูปแบบผิด → ปฏิเสธ', async () => {
+    const drug = await makeDrug('RECEIVE-EXPIRES-BAD-FORMAT')
+    expect.assertions(2)
+
+    try {
+      await createDrugStockMovement(
+        { drugId: drug.id, type: 'RECEIVE', quantity: '10', expiresOn: '30/06/2027' },
+        SYSTEM_USER_ID,
+      )
+    } catch (e) {
+      expect(isAppError(e)).toBe(true)
+      expect(isAppError(e) && e.code).toBe('INVALID')
+    }
+  })
+
   test('ยาถูกลบไปแล้ว → ปฏิเสธเหมือนไม่มีอยู่', async () => {
     const drug = await makeDrug('DELETED-DRUG')
     await db.drug.update({

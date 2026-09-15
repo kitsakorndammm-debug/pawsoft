@@ -28,13 +28,19 @@ async function makeDrug(suffix: string, opts: { isActive?: boolean; deleted?: bo
   return drug
 }
 
-async function move(drugId: bigint, type: 'RECEIVE' | 'DISPENSE' | 'ADJUST', quantity: string) {
+async function move(
+  drugId: bigint,
+  type: 'RECEIVE' | 'DISPENSE' | 'ADJUST',
+  quantity: string,
+  expiresOn?: string,
+) {
   return db.drugStockMovement.create({
     data: {
       drugId,
       type,
       quantity,
       reason: type === 'ADJUST' ? 'ทดสอบปรับยอด' : null,
+      expiresOn: expiresOn ? new Date(`${expiresOn}T00:00:00Z`) : null,
       createdBy: SYSTEM_USER_ID,
     },
   })
@@ -102,6 +108,28 @@ describe('สต็อกยา · ดูยอดคงเหลือ', () => 
     const rows = await listDrugStockBalances({ q: 'DELETED' })
 
     expect(rows.find((r) => r.drugId === drug.id)).toBeUndefined()
+  })
+
+  test('รับเข้าหลายล็อตวันหมดอายุต่างกัน → คืนวันที่ใกล้หมดอายุที่สุด', async () => {
+    const drug = await makeDrug('EXPIRY-NEAREST')
+    await move(drug.id, 'RECEIVE', '10', '2027-12-31')
+    await move(drug.id, 'RECEIVE', '10', '2027-03-15')
+    await move(drug.id, 'RECEIVE', '10', '2027-08-01')
+
+    const rows = await listDrugStockBalances({ q: 'EXPIRY-NEAREST' })
+    const row = rows.find((r) => r.drugId === drug.id)
+
+    expect(row?.nearestExpiry?.toISOString().slice(0, 10)).toBe('2027-03-15')
+  })
+
+  test('ไม่เคยระบุวันหมดอายุเลย → nearestExpiry เป็น null', async () => {
+    const drug = await makeDrug('EXPIRY-NONE')
+    await move(drug.id, 'RECEIVE', '10')
+
+    const rows = await listDrugStockBalances({ q: 'EXPIRY-NONE' })
+    const row = rows.find((r) => r.drugId === drug.id)
+
+    expect(row?.nearestExpiry).toBeNull()
   })
 
   test('ค้นด้วยชื่อ → กรองเฉพาะยาที่ชื่อตรง', async () => {

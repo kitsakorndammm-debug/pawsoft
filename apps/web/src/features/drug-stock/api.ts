@@ -15,6 +15,8 @@ export type DrugStockBalance = {
   isActive: boolean
   /** มีเครื่องหมาย — string เพราะเป็นเลขทศนิยม ห้ามแปลงเป็น number */
   quantity: string
+  /** วันหมดอายุที่ใกล้ที่สุดในบรรดาล็อตที่เคยรับเข้า (`YYYY-MM-DD`) — `null` ถ้าไม่เคยระบุ */
+  nearestExpiry: string | null
 }
 
 /**
@@ -28,6 +30,8 @@ export type CreateDrugStockMovementInput = {
   type: DrugStockMovementType
   quantity: string
   reason: string | null
+  /** ใส่ได้เฉพาะตอน `type: 'RECEIVE'` — BE ปฏิเสธถ้าใส่ตอนปรับยอด */
+  expiresOn: string | null
 }
 
 export type DrugStockMovement = {
@@ -36,6 +40,7 @@ export type DrugStockMovement = {
   type: string
   quantity: string
   reason: string | null
+  expiresOn: string | null
   createdAt: string
 }
 
@@ -56,6 +61,8 @@ export type DrugStockMovementRow = {
   quantity: string
   reason: string | null
   visitDrugId: number | null
+  /** วันหมดอายุของล็อตนี้ — มีค่าเฉพาะแถว `RECEIVE` ที่ตอนบันทึกระบุไว้ */
+  expiresOn: string | null
   createdAt: string
   createdByName: string
 }

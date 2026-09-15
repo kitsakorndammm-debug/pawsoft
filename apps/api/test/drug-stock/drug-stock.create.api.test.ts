@@ -95,6 +95,38 @@ describe('POST /api/drug-stock', () => {
     expect(body.error?.code).toBe('INVALID')
   })
 
+  test('รับเข้าพร้อมวันหมดอายุ → 201 คืนวันหมดอายุมาด้วย', async () => {
+    const drug = await makeDrug('RECEIVE-EXPIRES')
+
+    const res = await post({
+      drugId: Number(drug.id),
+      type: 'RECEIVE',
+      quantity: '10',
+      expiresOn: '2027-06-30',
+    })
+    const body = await readJson(res)
+
+    expect(res.status).toBe(201)
+    expect(body.data.expiresOn).toBe('2027-06-30')
+  })
+
+  test('ปรับยอดพร้อมวันหมดอายุ → 400 INVALID', async () => {
+    const drug = await makeDrug('ADJUST-EXPIRES-BLOCK')
+    await post({ drugId: Number(drug.id), type: 'RECEIVE', quantity: '10' })
+
+    const res = await post({
+      drugId: Number(drug.id),
+      type: 'ADJUST',
+      quantity: '-1',
+      reason: 'ทดสอบ',
+      expiresOn: '2027-06-30',
+    })
+    const body = await readJson(res)
+
+    expect(res.status).toBe(400)
+    expect(body.error?.code).toBe('INVALID')
+  })
+
   test('ส่ง type เป็น DISPENSE ตรงๆ → schema ปฏิเสธก่อนถึง service', async () => {
     const drug = await makeDrug('DISPENSE-BLOCK')
 

@@ -13,6 +13,7 @@ import { useCan } from '@/features/auth/hooks'
 import type { DrugStockBalance } from '@/features/drug-stock/api'
 import { useDrugStockBalances } from '@/features/drug-stock/hooks'
 import { toErrorMessage } from '@/lib/api-client'
+import { formatDate } from '@/lib/format'
 import { DRUG_STOCK_WRITE } from '@/lib/permissions'
 import { useDebounce } from '@/lib/use-debounce'
 
@@ -20,6 +21,19 @@ import { DrugStockDialog } from './drug-stock-dialog'
 import { DrugStockHistoryDialog } from './drug-stock-history-dialog'
 
 const NOUN = 'ยา'
+
+/** ใกล้หมดอายุภายในกี่วันถึงจะไฮไลต์เตือน — หมดอายุแล้วไฮไลต์เสมอไม่ว่ากี่วัน */
+const EXPIRY_WARN_DAYS = 30
+
+function expiryClassName(nearestExpiry: string | null): string | undefined {
+  if (nearestExpiry === null) return undefined
+
+  const days = (new Date(nearestExpiry).getTime() - Date.now()) / 86_400_000
+  if (days < 0) return 'text-destructive font-medium'
+  if (days <= EXPIRY_WARN_DAYS) return 'text-amber-600 font-medium'
+
+  return undefined
+}
 
 export default function DrugStockPage() {
   /**
@@ -59,6 +73,17 @@ function DrugStockList() {
           {row.quantity}
         </span>
       ),
+    },
+    {
+      key: 'nearestExpiry',
+      title: 'วันหมดอายุ',
+      width: 130,
+      render: (row) =>
+        row.nearestExpiry ? (
+          <span className={expiryClassName(row.nearestExpiry)}>{formatDate(row.nearestExpiry)}</span>
+        ) : (
+          '—'
+        ),
     },
     {
       key: 'status',
@@ -114,7 +139,8 @@ function DrugStockList() {
       />
 
       <PageHint>
-        ยอดคงเหลือคือผลรวมประวัติรับเข้า/จ่ายออก/ปรับยอดของยาแต่ละตัว — จ่ายยาในคิวตัดสต็อกให้เองอัตโนมัติ
+        ยอดคงเหลือคือผลรวมประวัติรับเข้า/จ่ายออก/ปรับยอดของยาแต่ละตัว — จ่ายยาในคิวตัดสต็อกให้เองอัตโนมัติ ·
+        วันหมดอายุคือล็อตที่ใกล้หมดอายุที่สุดจากประวัติรับเข้า
       </PageHint>
 
       <DataTable<DrugStockBalance>

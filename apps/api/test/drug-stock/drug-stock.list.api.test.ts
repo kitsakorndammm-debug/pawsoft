@@ -68,6 +68,31 @@ describe('GET /api/drug-stock', () => {
     expect(typeof row.quantity).toBe('string')
   })
 
+  test('รับเข้าพร้อมวันหมดอายุ → คืน nearestExpiry เป็นวันที่ในรูป YYYY-MM-DD', async () => {
+    const drug = await makeDrug('EXPIRY')
+    await createDrugStockMovement(
+      { drugId: drug.id, type: 'RECEIVE', quantity: '10', expiresOn: '2027-06-30' },
+      SYSTEM_USER_ID,
+    )
+
+    const res = await get(`?q=${encodeURIComponent(`${NAME_PREFIX}EXPIRY`)}`)
+    const body = await readJson(res)
+    const row = body.data.find((r: { id: number }) => r.id === Number(drug.id))
+
+    expect(row.nearestExpiry).toBe('2027-06-30')
+  })
+
+  test('ไม่เคยระบุวันหมดอายุ → nearestExpiry เป็น null', async () => {
+    const drug = await makeDrug('NO-EXPIRY')
+    await createDrugStockMovement({ drugId: drug.id, type: 'RECEIVE', quantity: '10' }, SYSTEM_USER_ID)
+
+    const res = await get(`?q=${encodeURIComponent(`${NAME_PREFIX}NO-EXPIRY`)}`)
+    const body = await readJson(res)
+    const row = body.data.find((r: { id: number }) => r.id === Number(drug.id))
+
+    expect(row.nearestExpiry).toBeNull()
+  })
+
   test('ค้นด้วยชื่อ → กรองเฉพาะยาที่ตรง', async () => {
     await makeDrug('SEARCH-X')
     await makeDrug('SEARCH-Y')

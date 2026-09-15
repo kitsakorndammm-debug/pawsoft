@@ -123,6 +123,7 @@ COMMENT ON TABLE drug_stock_movement IS
   'ประวัติสต็อกยา — log ที่ไม่แก้ไม่ลบ จำนวนคงเหลือคือผลรวม quantity ต่อยาแต่ละตัว';
 COMMENT ON COLUMN drug_stock_movement.quantity IS 'มีเครื่องหมาย บวกคือเพิ่มสต็อก ลบคือลดสต็อก';
 COMMENT ON COLUMN drug_stock_movement.reason IS 'บังคับกรอกเฉพาะตอนปรับยอด (type = ADJUST)';
+COMMENT ON COLUMN drug_stock_movement.expires_on IS 'วันหมดอายุของล็อตที่รับเข้า — ใส่ได้เฉพาะตอน type = RECEIVE';
 
 -- ไม่มีค่า 0 — ไม่มีเหตุผลจะบันทึกรายการที่ไม่เปลี่ยนอะไรเลย
 ALTER TABLE drug_stock_movement DROP CONSTRAINT IF EXISTS drug_stock_movement_quantity_check;
@@ -133,3 +134,8 @@ ALTER TABLE drug_stock_movement ADD CONSTRAINT drug_stock_movement_quantity_chec
 ALTER TABLE drug_stock_movement DROP CONSTRAINT IF EXISTS drug_stock_movement_reason_check;
 ALTER TABLE drug_stock_movement ADD CONSTRAINT drug_stock_movement_reason_check
   CHECK (type <> 'ADJUST' OR btrim(coalesce(reason, '')) <> '');
+
+-- วันหมดอายุมีความหมายเฉพาะตอนรับเข้า — ประเภทอื่นห้ามมีค่านี้ติดมา
+ALTER TABLE drug_stock_movement DROP CONSTRAINT IF EXISTS drug_stock_movement_expires_on_check;
+ALTER TABLE drug_stock_movement ADD CONSTRAINT drug_stock_movement_expires_on_check
+  CHECK (expires_on IS NULL OR type = 'RECEIVE');

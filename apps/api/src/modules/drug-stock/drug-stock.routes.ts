@@ -30,7 +30,10 @@ import type { DrugStockMovement } from '../../../prisma/generated/client.ts'
  */
 
 const LIST_QUERY_KEYS = new Set(['q'])
-const WRITE_FIELDS = new Set(['drugId', 'type', 'quantity', 'reason'])
+const WRITE_FIELDS = new Set(['drugId', 'type', 'quantity', 'reason', 'expiresOn'])
+
+/** วันที่-only ออกเป็น `YYYY-MM-DD` ไม่ใช่ ISO timestamp เต็ม — ไม่มีเวลาให้สื่อสาร */
+const dateOnlyWire = (d: Date | null) => (d === null ? null : d.toISOString().slice(0, 10))
 
 /** BigInt ออกเป็น `number` · จำนวนออกเป็น `string` — เหตุผลเดียวกับ `drug.routes.ts` */
 const toWire = (row: DrugStockBalance) => ({
@@ -40,6 +43,7 @@ const toWire = (row: DrugStockBalance) => ({
   unit: row.unit,
   isActive: row.isActive,
   quantity: row.quantity.toString(),
+  nearestExpiry: dateOnlyWire(row.nearestExpiry),
 })
 
 const movementToWire = (row: DrugStockMovement) => ({
@@ -48,6 +52,7 @@ const movementToWire = (row: DrugStockMovement) => ({
   type: row.type,
   quantity: row.quantity.toString(),
   reason: row.reason,
+  expiresOn: dateOnlyWire(row.expiresOn),
   createdAt: row.createdAt.toISOString(),
 })
 
@@ -57,6 +62,7 @@ const movementRowToWire = (row: DrugStockMovementRow) => ({
   quantity: row.quantity.toString(),
   reason: row.reason,
   visitDrugId: row.visitDrugId === null ? null : Number(row.visitDrugId),
+  expiresOn: dateOnlyWire(row.expiresOn),
   createdAt: row.createdAt.toISOString(),
   createdByName: row.createdByName,
 })
@@ -67,6 +73,7 @@ const createSchema = t.Object(
     type: t.Union([t.Literal('RECEIVE'), t.Literal('ADJUST')]),
     quantity: t.String(),
     reason: t.Optional(t.Union([t.String(), t.Null()])),
+    expiresOn: t.Optional(t.Union([t.String(), t.Null()])),
   },
   { additionalProperties: false },
 )
@@ -114,6 +121,7 @@ export const drugStockRoutes = new Elysia({ prefix: '/api/drug-stock' })
           type: body.type,
           quantity: body.quantity,
           reason: body.reason ?? null,
+          expiresOn: body.expiresOn ?? null,
         },
         actor.userId,
       )

@@ -2,6 +2,7 @@
 
 import { z } from 'zod'
 
+import { AppDatePicker } from '@/components/common/app-date-picker'
 import { AppFormField } from '@/components/common/app-form-field'
 import { ComboboxField } from '@/components/common/combobox-field'
 import { FormDialog } from '@/components/common/form-dialog'
@@ -27,6 +28,8 @@ const schema = z
       .regex(QUANTITY_PATTERN, 'จำนวนต้องเป็นตัวเลข ทศนิยมไม่เกินสองตำแหน่ง')
       .refine((v) => Number(v) !== 0, 'จำนวนต้องไม่เป็นศูนย์'),
     reason: z.string().trim().max(REASON_MAX, `ยาวเกิน ${REASON_MAX} ตัวอักษร`).optional(),
+    // ไม่บังคับกรอก — ซัพพลายเออร์บางรายไม่มีข้อมูลนี้ให้ (ดูฝั่ง BE ก่อนใส่ฟิลด์ใหม่)
+    expiresOn: z.string().trim().optional(),
   })
   // รับเข้าต้องเป็นบวก — ตรงกับที่ BE ปฏิเสธ ให้กรอบแดงขึ้นก่อนยิง API
   .refine((data) => data.type !== 'RECEIVE' || Number(data.quantity) > 0, {
@@ -60,6 +63,8 @@ export function DrugStockDialog({
       type: values.type,
       quantity: values.quantity,
       reason: values.reason?.trim() || null,
+      // เลือกได้เฉพาะตอนรับเข้า — BE ปฏิเสธถ้าติดมากับ ADJUST (สลับ type แล้วเผลอส่งค้าง)
+      expiresOn: values.type === 'RECEIVE' ? (values.expiresOn?.trim() || null) : null,
     })
 
     // ชื่อยาเอาจากตัวเลือกที่โหลดไว้ — response ของ BE คืนแค่ `drugId` ไม่มีชื่อ
@@ -82,6 +87,7 @@ export function DrugStockDialog({
         type: 'RECEIVE',
         quantity: '',
         reason: '',
+        expiresOn: '',
       }}
       onSubmit={handleSubmit}
       formKey="new"
@@ -121,6 +127,17 @@ export function DrugStockDialog({
           <AppFormField name="quantity" label="จำนวน" required>
             <Input {...form.register('quantity')} disabled={pending} />
           </AppFormField>
+
+          {form.watch('type') === 'RECEIVE' && (
+            <AppFormField name="expiresOn" label="วันหมดอายุ">
+              <AppDatePicker
+                value={form.watch('expiresOn') as string | null}
+                onChange={(v) => form.setValue('expiresOn', v ?? '')}
+                disabled={pending}
+                aria-label="วันหมดอายุ"
+              />
+            </AppFormField>
+          )}
 
           {form.watch('type') === 'ADJUST' && (
             <p className="-mt-2 text-xs text-muted-foreground">

@@ -22,6 +22,8 @@ export type DrugStockBalance = {
   unit: string | null
   isActive: boolean
   quantity: Prisma.Decimal
+  /** วันหมดอายุที่ใกล้ที่สุดในบรรดาล็อตที่เคยรับเข้า — `null` ถ้าไม่เคยระบุไว้เลย */
+  nearestExpiry: Date | null
 }
 
 export type ListDrugStockBalancesInput = { q?: string | undefined }
@@ -57,7 +59,15 @@ export async function listDrugStockBalances(
     _sum: { quantity: true },
   })
 
+  // ล็อตที่ใกล้หมดอายุที่สุด — เอาเฉพาะ `RECEIVE` ที่ระบุวันหมดอายุไว้ (ไม่ใช่ทุก movement)
+  const expiries = await at.drugStockMovement.groupBy({
+    by: ['drugId'],
+    where: { drugId: { in: drugs.map((d) => d.id) }, type: 'RECEIVE', expiresOn: { not: null } },
+    _min: { expiresOn: true },
+  })
+
   const balanceByDrugId = new Map(sums.map((s) => [s.drugId, s._sum.quantity ?? new Prisma.Decimal(0)]))
+  const expiryByDrugId = new Map(expiries.map((e) => [e.drugId, e._min.expiresOn ?? null]))
 
   return drugs
     .map((d) => ({
@@ -67,6 +77,7 @@ export async function listDrugStockBalances(
       unit: d.unit,
       isActive: d.isActive,
       quantity: balanceByDrugId.get(d.id) ?? new Prisma.Decimal(0),
+      nearestExpiry: expiryByDrugId.get(d.id) ?? null,
     }))
     .filter((d) => d.isActive || !d.quantity.isZero())
 }
@@ -77,6 +88,8 @@ export type DrugStockMovementRow = {
   quantity: Prisma.Decimal
   reason: string | null
   visitDrugId: bigint | null
+  /** วันหมดอายุของล็อตนี้ — มีค่าเฉพาะแถว `RECEIVE` ที่ตอนบันทึกระบุไว้ */
+  expiresOn: Date | null
   createdAt: Date
   /** ชื่อเต็มของพนักงาน ถ้าบัญชีนั้นผูกกับพนักงาน · ไม่งั้นใช้ username แทน */
   createdByName: string
@@ -129,6 +142,7 @@ export async function listDrugStockMovements(
     quantity: m.quantity,
     reason: m.reason,
     visitDrugId: m.visitDrugId,
+    expiresOn: m.expiresOn,
     createdAt: m.createdAt,
     createdByName: nameByUserId.get(m.createdBy) ?? 'ไม่ทราบ',
   }))
@@ -143,6 +157,25 @@ async function currentBalance(at: Db | Tx, drugId: bigint): Promise<Prisma.Decim
   return sum._sum.quantity ?? new Prisma.Decimal(0)
 }
 
+/** วันที่รับเข้ามาเป็น `YYYY-MM-DD` — เก็บเป็น `@db.Date` ไม่มีเวลา ไม่มี timezone */
+function cleanExpiresOn(raw: string | null | undefined): Date | null {
+  if (raw === null || raw === undefined) return null
+
+  const value = raw.trim()
+  if (value.length === 0) return null
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw invalid('วันหมดอายุต้องเป็นวันที่ในรูป YYYY-MM-DD', { field: 'expiresOn', value })
+  }
+
+  const date = new Date(`${value}T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) {
+    throw invalid('วันหมดอายุไม่ใช่วันที่ที่มีอยู่จริง', { field: 'expiresOn', value })
+  }
+
+  return date
+}
+
 export type CreateDrugStockMovementInput = {
   drugId: bigint
   /** **แค่สองแบบนี้** — `DISPENSE`/`DISPENSE_REVERSED` เป็นของที่ระบบสร้างเองตอนจ่าย/ลบ
@@ -150,6 +183,8 @@ export type CreateDrugStockMovementInput = {
   type: 'RECEIVE' | 'ADJUST'
   quantity: string
   reason?: string | null | undefined
+  /** วันหมดอายุของล็อตนี้ — ใส่ได้เฉพาะตอน `type = RECEIVE` (บังคับที่ฐานด้วย CHECK) */
+  expiresOn?: string | null | undefined
 }
 
 /**
@@ -182,6 +217,11 @@ export async function createDrugStockMovement(
     throw invalid('ปรับยอดต้องกรอกเหตุผล', { field: 'reason' })
   }
 
+  const expiresOn = cleanExpiresOn(input.expiresOn)
+  if (input.type !== 'RECEIVE' && expiresOn !== null) {
+    throw invalid('ระบุวันหมดอายุได้เฉพาะตอนรับเข้า', { field: 'expiresOn' })
+  }
+
   return inTx(outerTx, async (tx) => {
     const drug = await tx.drug.findFirst({
       where: { id: input.drugId, deletedAt: null },
@@ -195,7 +235,7 @@ export async function createDrugStockMovement(
     }
 
     const created = await tx.drugStockMovement.create({
-      data: { drugId: input.drugId, type: input.type, quantity, reason, createdBy: actorId },
+      data: { drugId: input.drugId, type: input.type, quantity, reason, expiresOn, createdBy: actorId },
     })
 
     await writeAudit(tx, {
@@ -207,6 +247,7 @@ export async function createDrugStockMovement(
         type: created.type,
         quantity: created.quantity.toString(),
         reason: created.reason,
+        expiresOn: created.expiresOn?.toISOString().slice(0, 10) ?? null,
       },
       userId: actorId,
     })

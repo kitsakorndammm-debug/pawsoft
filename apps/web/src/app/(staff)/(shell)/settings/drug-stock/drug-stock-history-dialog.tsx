@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { DRUG_STOCK_MOVEMENT_TYPE_LABEL } from '@/features/drug-stock/api'
 import { useDrugStockMovements } from '@/features/drug-stock/hooks'
 import { toErrorMessage } from '@/lib/api-client'
+import { formatDate } from '@/lib/format'
 
 /** ดูประวัติการเคลื่อนไหวของยาตัวเดียว — อ่านอย่างเดียว ไม่มีแก้/ลบ เพราะเป็น log */
 export function DrugStockHistoryDialog({
@@ -57,6 +58,11 @@ export function DrugStockHistoryDialog({
                 <span className="min-w-0 flex-1 truncate text-muted-foreground">
                   {m.reason ?? '—'}
                 </span>
+                {m.expiresOn ? (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    หมดอายุ {formatDate(m.expiresOn)}
+                  </span>
+                ) : null}
                 <span className="shrink-0 text-xs text-muted-foreground">{m.createdByName}</span>
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {new Date(m.createdAt).toLocaleString('th-TH', {

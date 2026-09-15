@@ -66,6 +66,19 @@ describe('GET /api/drug-stock/:drugId/movements', () => {
     expect(typeof body.data[0].createdByName).toBe('string')
   })
 
+  test('รับเข้าพร้อมวันหมดอายุ → แถวมี expiresOn เป็นวันที่ในรูป YYYY-MM-DD', async () => {
+    const drug = await makeDrug('EXPIRY')
+    await createDrugStockMovement(
+      { drugId: drug.id, type: 'RECEIVE', quantity: '20', expiresOn: '2027-06-30' },
+      SYSTEM_USER_ID,
+    )
+
+    const res = await get(drug.id)
+    const body = await readJson(res)
+
+    expect(body.data[0].expiresOn).toBe('2027-06-30')
+  })
+
   test('ไม่มียาตัวนี้ → 404 NOT_FOUND', async () => {
     const res = await get(999_999_999n)
     const body = await readJson(res)

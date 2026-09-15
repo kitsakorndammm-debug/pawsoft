@@ -145,6 +145,12 @@ model DrugStockMovement {
   /// เหตุผล — บังคับกรอกเฉพาะตอน `type = ADJUST` (บังคับที่ฐานด้วย CHECK)
   reason String? @db.VarChar(500)
 
+  /// วันหมดอายุของล็อตที่รับเข้า — ใส่ได้เฉพาะตอน `type = RECEIVE` (บังคับที่ฐานด้วย CHECK)
+  ///
+  /// ไม่บังคับกรอก (ซัพพลายเออร์บางรายไม่มีข้อมูลนี้ให้) · `@db.Date` ไม่ใช่ `DateTime`
+  /// เต็ม เพราะไม่มีใครรู้ว่าหมดอายุกี่โมง
+  expiresOn DateTime? @map("expires_on") @db.Date
+
   /// รายการจ่ายยาที่ทำให้เกิดแถวนี้ — ใส่เฉพาะ `DISPENSE`/`DISPENSE_REVERSED`
   ///
   /// ไม่บังคับ (`onDelete` ไม่ระบุ = ปล่อยเป็นค่า default ของ FK ว่างได้ คือ `SET NULL`)
