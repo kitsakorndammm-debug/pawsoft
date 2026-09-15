@@ -55,7 +55,7 @@ function DrugStockList() {
       width: 120,
       align: 'right',
       render: (row) => (
-        <span className={Number(row.quantity) < 0 ? 'text-destructive' : undefined}>
+        <span className={Number(row.quantity) <= 0 ? 'text-destructive' : undefined}>
           {row.quantity}
         </span>
       ),

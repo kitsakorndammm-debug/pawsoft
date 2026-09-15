@@ -7,12 +7,17 @@ import { type CreateDrugStockMovementInput, drugStockApi } from './api'
 const LIST_ROOT = ['drug-stock', 'list'] as const
 const MOVEMENTS_ROOT = ['drug-stock', 'movements'] as const
 
-export function useDrugStockBalances(q: string) {
+export function useDrugStockBalances(
+  q: string,
+  /** `refetchInterval` — ใช้กับกระดิ่งแจ้งเตือนที่ต้องรู้ทันทีว่ายาใกล้หมด */
+  options?: { refetchInterval?: number },
+) {
   return useQuery({
     queryKey: [...LIST_ROOT, q],
     queryFn: () => drugStockApi.list(q),
     // เก็บผลเก่าไว้ระหว่างพิมพ์ค้นหา — ไม่งั้นตารางกระพริบเป็นจอเปล่าทุกตัวอักษร
     placeholderData: (previous) => previous,
+    refetchInterval: options?.refetchInterval,
   })
 }
 

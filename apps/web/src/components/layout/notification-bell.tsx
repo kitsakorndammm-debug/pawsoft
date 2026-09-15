@@ -9,14 +9,16 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { SLOT_LABEL, type AppointmentRow } from '@/features/appointment/api'
 import { useAppointments, useConfirmAppointment } from '@/features/appointment/hooks'
 import { useCan } from '@/features/auth/hooks'
+import { type DrugStockBalance } from '@/features/drug-stock/api'
+import { useDrugStockBalances } from '@/features/drug-stock/hooks'
 import { type Invoice } from '@/features/payment/api'
 import { useInvoices, useVerifyInvoice } from '@/features/payment/hooks'
 import { type QueueRow } from '@/features/visit/api'
 import { useCallVisit, useQueue } from '@/features/visit/hooks'
 import { toErrorMessage } from '@/lib/api-client'
 import { formatDate } from '@/lib/format'
-import { BILLING_VERIFY, MEDICAL_WRITE, RECEPTION_WRITE } from '@/lib/permissions'
-import { ROUTE_APPOINTMENTS, ROUTE_BILLING, ROUTE_QUEUE } from '@/lib/routes'
+import { BILLING_VERIFY, DRUG_STOCK_READ, MEDICAL_WRITE, RECEPTION_WRITE } from '@/lib/permissions'
+import { ROUTE_APPOINTMENTS, ROUTE_BILLING, ROUTE_DRUG_STOCK, ROUTE_QUEUE } from '@/lib/routes'
 
 const POLL_MS = 20_000
 
@@ -24,10 +26,11 @@ const POLL_MS = 20_000
  * กระดิ่งแจ้งเตือน — อยู่ข้าง ๆ ปุ่มออกจากระบบ (ผู้ใช้ตัดสิน 2026-09-09)
  *
  * **คนละเรื่องคนละสิทธิ์ ต้องมีของตัวเอง ไม่ใช่กระดิ่งเดียวแจ้งทุกอย่างให้ทุกคน**
- * เคาน์เตอร์ต้องยืนยันใบจอง · บัญชีต้องตรวจยอด · หมอต้องรู้ว่ามีเคสฉุกเฉินรอ —
- * สามเรื่องนี้ไม่มีใครอยากเห็นของอีกฝ่าย และคนที่ไม่มีสิทธิ์ทำอะไรกับมันไม่ควรเห็น
- * ปุ่มที่กดแล้วโดนปฏิเสธ (403) จึงกรองแต่ละส่วนด้วย permission ของ action นั้นเอง
- * ไม่ใช่ permission ของการ "ดู" เฉย ๆ
+ * เคาน์เตอร์ต้องยืนยันใบจอง · บัญชีต้องตรวจยอด · หมอต้องรู้ว่ามีเคสฉุกเฉินรอ ·
+ * คนดูคลังยาต้องรู้ว่ายาหมด — สี่เรื่องนี้ไม่มีใครอยากเห็นของอีกฝ่าย และคนที่ไม่มีสิทธิ์
+ * ทำอะไรกับมันไม่ควรเห็น ปุ่มที่กดแล้วโดนปฏิเสธ (403) จึงกรองแต่ละส่วนด้วย permission
+ * ของ action นั้นเอง ไม่ใช่ permission ของการ "ดู" เฉย ๆ (ยกเว้นสต็อกยาที่เป็นข้อมูลอ่าน
+ * ล้วน ๆ จึงกรองด้วย `main:drug-stock:read`)
  *
  * **poll ทุก 20 วิ ไม่ใช่ websocket** — เหตุผลเดียวกับจอคิว (`useQueue`) ไม่มี
  * โครงสร้าง realtime ในระบบนี้ และของแบบนี้ไม่จำเป็นต้องไวระดับวินาที
@@ -36,15 +39,17 @@ export function NotificationBell() {
   const canConfirmAppointments = useCan(RECEPTION_WRITE)
   const canVerifyBilling = useCan(BILLING_VERIFY)
   const canTreat = useCan(MEDICAL_WRITE)
+  const canSeeStock = useCan(DRUG_STOCK_READ)
 
   // ไม่มีสิทธิ์แม้แต่ข้อเดียว = ไม่มีกระดิ่งให้เห็นเลย ไม่ใช่กระดิ่งว่างเปล่า
-  if (!canConfirmAppointments && !canVerifyBilling && !canTreat) return null
+  if (!canConfirmAppointments && !canVerifyBilling && !canTreat && !canSeeStock) return null
 
   return (
     <NotificationBellContent
       canConfirmAppointments={canConfirmAppointments}
       canVerifyBilling={canVerifyBilling}
       canTreat={canTreat}
+      canSeeStock={canSeeStock}
     />
   )
 }
@@ -53,10 +58,12 @@ function NotificationBellContent({
   canConfirmAppointments,
   canVerifyBilling,
   canTreat,
+  canSeeStock,
 }: {
   canConfirmAppointments: boolean
   canVerifyBilling: boolean
   canTreat: boolean
+  canSeeStock: boolean
 }) {
   /**
    * เรียก hook ทุกตัวเสมอ (กฎ hook) แต่ query จริงเฉพาะตอนมีสิทธิ์ — `enabled` ปิดไว้
@@ -72,6 +79,7 @@ function NotificationBellContent({
   )
   // `useQueue` poll ทุก 15 วิให้เองอยู่แล้ว (ดูคอมเมนต์บนตัวมันเอง)
   const queue = useQueue(null)
+  const stock = useDrugStockBalances('', { refetchInterval: canSeeStock ? POLL_MS : undefined })
 
   const confirm = useConfirmAppointment()
   const verify = useVerifyInvoice()
@@ -89,7 +97,13 @@ function NotificationBellContent({
   const emergencyRows = canTreat
     ? (queue.data ?? []).filter((r) => r.status === 'WAITING' && r.triage === 'EMERGENCY')
     : []
-  const totalCount = appointmentCount + invoiceCount + emergencyRows.length
+
+  /** ยาที่ยอดคงเหลือหมดหรือติดลบ — สัญญาณว่าต้องไปบันทึกรับเข้าจริง (ดูหน้าคลังยา) */
+  const lowStockRows = canSeeStock
+    ? (stock.data ?? []).filter((d) => Number(d.quantity) <= 0)
+    : []
+
+  const totalCount = appointmentCount + invoiceCount + emergencyRows.length + lowStockRows.length
 
   async function handleConfirm(id: number, name: string) {
     try {
@@ -160,6 +174,8 @@ function NotificationBellContent({
             {canVerifyBilling && invoiceRows.length > 0 ? (
               <InvoiceSection rows={invoiceRows} pending={verify.isPending} onVerify={handleVerify} />
             ) : null}
+
+            {canSeeStock && lowStockRows.length > 0 ? <StockSection rows={lowStockRows} /> : null}
           </>
         )}
       </PopoverContent>
@@ -298,6 +314,36 @@ function InvoiceSection({
       </div>
       <Link href={ROUTE_BILLING} className="text-center text-xs text-primary-strong hover:underline">
         ดูบิลทั้งหมด
+      </Link>
+    </div>
+  )
+}
+
+/**
+ * ยาที่ยอดคงเหลือ ≤ 0 — ของคนดูสต็อกยา (`main:drug-stock:read`)
+ *
+ * **ไม่มีปุ่มกดจบในตัว** ต่างจากส่วนอื่น — การเติมสต็อกต้องกรอกจำนวน/เหตุผลในฟอร์ม
+ * ยัดลงกล่องเล็ก ๆ นี้ไม่ไหว จึงพาไปหน้าคลังยาแทน (เหมือนกระดิ่งฝั่งลูกค้าที่พาไปหน้าใบเสร็จ)
+ */
+function StockSection({ rows }: { rows: DrugStockBalance[] }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <SectionHeader label="ยาหมด/ติดลบ" count={rows.length} />
+      <div className="flex max-h-60 flex-col gap-1.5 overflow-y-auto">
+        {rows.map((row) => (
+          <div
+            key={row.id}
+            className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-2 text-sm"
+          >
+            <p className="truncate font-medium">{row.name}</p>
+            <p className="shrink-0 text-xs font-medium text-amber-800">
+              คงเหลือ {row.quantity} {row.unit ?? ''}
+            </p>
+          </div>
+        ))}
+      </div>
+      <Link href={ROUTE_DRUG_STOCK} className="text-center text-xs text-primary-strong hover:underline">
+        ไปที่หน้าคลังยา
       </Link>
     </div>
   )
