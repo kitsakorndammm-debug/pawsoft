@@ -99,11 +99,14 @@ export function AppointmentMonthView({
                     ) : count > 0 ? (
                       <span
                         className={cn(
-                          'rounded px-2 py-1 text-sm font-semibold',
+                          'flex flex-col items-center rounded px-2 py-1 text-sm font-semibold leading-tight',
                           fullnessBadgeClassName(count, capacity),
                         )}
                       >
-                        {count} คิว
+                        <span>{count} คิว</span>
+                        <span className="text-xs font-normal opacity-80">
+                          {count}/{capacity}
+                        </span>
                       </span>
                     ) : inMonth ? (
                       <span className="text-xs text-muted-foreground/70">ว่าง</span>
