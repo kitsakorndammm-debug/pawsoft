@@ -45,7 +45,7 @@ export const APPOINTMENT_SLOTS = [
  * **นับเฉพาะ `BOOKED`** — `PENDING` ยังไม่ใช่คำมั่นของคลินิก ปล่อยให้ลูกค้าจองเข้ามา
  * ได้เรื่อย ๆ พนักงานเป็นคนคัดกรองทีหลังตอนโทรยืนยัน (ดู `confirmAppointment`)
  */
-const MAX_BOOKED_PER_SLOT = 8
+export const MAX_BOOKED_PER_SLOT = 8
 
 /**
  * ช่วงนี้ยังรับเพิ่มได้ไหม — เรียกก่อน insert/update ที่จะทำให้แถวกลายเป็น `BOOKED`
@@ -171,6 +171,41 @@ export async function listAppointments(
   ])
 
   return { rows, page, pageSize, total }
+}
+
+export type AppointmentDailyCount = { bookedOn: Date; count: number }
+
+export type ListAppointmentDailyCountsInput = { from: string; to: string }
+
+/**
+ * จำนวนใบจองต่อวันในช่วง — ใช้วาดมุมมองสัปดาห์/เดือน/ปีของตารางจอง (ผู้ใช้ตัดสิน
+ * 2026-09-15) คำถามคือ "วันนี้เต็มแค่ไหน" ไม่ใช่ "ใครจองไว้บ้าง" จึงคืนแค่ตัวเลข
+ *
+ * **นับเฉพาะ `BOOKED`** — เหตุผลเดียวกับเพดานที่ `requireSlotCapacity`
+ * (`PENDING` ยังไม่ใช่คำมั่นของคลินิก)
+ *
+ * **วันที่ไม่มีจองเลยไม่ปรากฏในผลลัพธ์** — หน้าจอเติม 0 เองให้วันที่ไม่เจอในลิสต์นี้
+ * ง่ายกว่าให้ฐานคืนทุกวันในช่วงมาเป็นแถว 0 (ช่วงปีนึงคือ 365 แถวที่ส่วนใหญ่ไม่มีประโยชน์)
+ */
+export async function listAppointmentDailyCounts(
+  input: ListAppointmentDailyCountsInput,
+  tx?: Tx,
+): Promise<AppointmentDailyCount[]> {
+  const from = cleanBookedOn(input.from)
+  const to = cleanBookedOn(input.to)
+
+  if (from > to) {
+    throw invalid('ช่วงวันที่ไม่ถูกต้อง — วันเริ่มต้องมาก่อนวันสิ้นสุด', { field: 'from' })
+  }
+
+  const at = tx ?? db
+  const rows = await at.appointment.groupBy({
+    by: ['bookedOn'],
+    where: { bookedOn: { gte: from, lte: to }, status: 'BOOKED', deletedAt: null },
+    _count: { _all: true },
+  })
+
+  return rows.map((r) => ({ bookedOn: r.bookedOn, count: r._count._all }))
 }
 
 export type CreateAppointmentInput = {

@@ -44,6 +44,15 @@ export function useSlots() {
   })
 }
 
+/** นับต่อวันในช่วง — ใช้วาดมุมมองสัปดาห์/เดือน/ปี (ผู้ใช้ขอ 2026-09-15) */
+export function useAppointmentDailyCounts(from: string | null, to: string | null) {
+  return useQuery({
+    queryKey: [...APPOINTMENT_ROOT, 'daily-counts', from, to],
+    queryFn: () => appointmentApi.dailyCounts(from!, to!),
+    enabled: from !== null && to !== null,
+  })
+}
+
 function useInvalidate() {
   const qc = useQueryClient()
 

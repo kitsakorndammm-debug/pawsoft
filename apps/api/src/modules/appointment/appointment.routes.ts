@@ -24,11 +24,13 @@ import {
 import {
   APPOINTMENT_PAGE_SIZE,
   APPOINTMENT_SLOTS,
+  MAX_BOOKED_PER_SLOT,
   cancelAppointment,
   confirmAppointment,
   createAppointment,
   deleteAppointment,
   findAppointment,
+  listAppointmentDailyCounts,
   listAppointments,
   markNoShow,
   todayDate,
@@ -70,6 +72,7 @@ import type {
  */
 
 const LIST_QUERY_KEYS = new Set(['bookedOn', 'slot', 'status', 'ownerId', 'page', 'pageSize'])
+const DAILY_COUNTS_QUERY_KEYS = new Set(['from', 'to'])
 const MY_LIST_QUERY_KEYS = new Set(['status', 'page', 'pageSize'])
 
 const CREATE_FIELDS = new Set(['bookedOn', 'slot', 'ownerId', 'petId', 'petNameText', 'reason'])
@@ -191,6 +194,33 @@ export const appointmentRoutes = new Elysia({ prefix: '/api/appointments' })
     beforeHandle: guardReceptionRead,
     detail: { tags: ['การจอง'], summary: 'ช่วงเวลาที่จองได้' },
   })
+
+  /**
+   * จำนวนใบจองต่อวันในช่วง — ให้มุมมองสัปดาห์/เดือน/ปีของตารางจอง
+   *
+   * **ประกาศก่อน `/:id`** — ไม่งั้น `/daily-counts` จะโดนจับเป็นค่า `:id` แทน
+   *
+   * `capacityPerDay` มาจาก BE ตัวเดียว ไม่ hardcode ซ้ำที่หน้าเว็บ — วันหนึ่งถ้าเพดาน
+   * เปลี่ยนจะได้เปลี่ยนที่เดียว หน้าจอไม่ต้องรู้ว่าคำนวณมาจาก 8 คิว/ช่วง คูณ 4 ช่วง
+   */
+  .get(
+    '/daily-counts',
+    async ({ query, request }) => {
+      refuseUnknownQuery(request.url, DAILY_COUNTS_QUERY_KEYS)
+
+      const rows = await listAppointmentDailyCounts({ from: query.from, to: query.to })
+
+      return ok({
+        capacityPerDay: MAX_BOOKED_PER_SLOT * APPOINTMENT_SLOTS.length,
+        days: rows.map((r) => ({ bookedOn: toDate(r.bookedOn), count: r.count })),
+      })
+    },
+    {
+      beforeHandle: guardReceptionRead,
+      query: t.Object({ from: t.String(), to: t.String() }),
+      detail: { tags: ['การจอง'], summary: 'จำนวนใบจองต่อวันในช่วง — สำหรับมุมมองสัปดาห์/เดือน/ปี' },
+    },
+  )
 
   .get('/:id', async ({ params }) => ok(toWire(await findAppointment(parseId(params.id)))), {
     beforeHandle: guardReceptionRead,

@@ -76,6 +76,13 @@ export type AppointmentInput = {
   reason: string | null
 }
 
+/** จำนวนใบจองต่อวันในช่วง — ใช้วาดมุมมองสัปดาห์/เดือน/ปี */
+export type AppointmentDailyCounts = {
+  /** เพดานคิวสูงสุดต่อวัน มาจาก BE ตัวเดียว — ไม่ hardcode ซ้ำที่นี่ */
+  capacityPerDay: number
+  days: { bookedOn: string; count: number }[]
+}
+
 export const appointmentApi = {
   list: (input: {
     bookedOn: string | null
@@ -96,6 +103,12 @@ export const appointmentApi = {
   /** ช่วงเวลาและ "วันนี้" จาก BE — **ไม่คำนวณวันนี้เองในเบราว์เซอร์** */
   slots: () =>
     api.get<{ slots: AppointmentSlot[]; today: string }>('/api/appointments/slots'),
+
+  /** ใช้วาดมุมมองสัปดาห์/เดือน/ปี — `from`/`to` เป็น `YYYY-MM-DD` ทั้งคู่ */
+  dailyCounts: (from: string, to: string) =>
+    api.get<AppointmentDailyCounts>(
+      `/api/appointments/daily-counts?from=${from}&to=${to}`,
+    ),
 
   /**
    * เหมือนกัน แต่เป็น**เส้นของลูกค้า**

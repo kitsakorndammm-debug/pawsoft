@@ -29,8 +29,14 @@ import { RECEPTION_WRITE } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 
 import { AppointmentDialog } from './appointment-dialog'
+import { AppointmentMonthView } from './appointment-month-view'
+import { AppointmentWeekView } from './appointment-week-view'
+import { AppointmentYearView } from './appointment-year-view'
 
 const SLOTS: AppointmentSlot[] = ['MORNING_1', 'MORNING_2', 'AFTERNOON_1', 'AFTERNOON_2']
+
+type BoardView = 'day' | 'week' | 'month' | 'year'
+const VIEW_LABEL: Record<BoardView, string> = { day: 'วัน', week: 'สัปดาห์', month: 'เดือน', year: 'ปี' }
 
 /**
  * ตารางจองรายวัน — **แบ่งตามช่วงเวลา ไม่ใช่ตารางแถวเดียว**
@@ -46,6 +52,15 @@ function AppointmentBoard() {
 
   const [date, setDate] = useQueryState('date', { defaultValue: '', clearOnDefault: true })
   const activeDate = date || slots.data?.today || null
+
+  /**
+   * **มุมมองวัน/สัปดาห์/เดือน/ปี** (ผู้ใช้ขอ 2026-09-15) — วัน (ค่าเดิม) ยังทำงาน
+   * เหมือนก่อนทุกอย่าง สามมุมมองใหม่โชว์แค่จำนวน/ความเต็มต่อวันเพื่อวางแผนล่วงหน้า
+   * กดวัน (หรือเดือนในมุมมองปี) เพื่อกลับมาที่รายละเอียดแบบเดิม
+   */
+  const [rawView, setView] = useQueryState('view', { defaultValue: 'day', clearOnDefault: true })
+  const view: BoardView =
+    rawView === 'week' || rawView === 'month' || rawView === 'year' ? rawView : 'day'
   /**
    * กำลังดูวันที่ยังไม่ถึง — **ซ่อนปุ่ม "มาถึงแล้ว" แทนที่จะให้กดแล้วโดนปฏิเสธ**
    * (ผู้ใช้ตัดสิน 2026-09-09) เช็คอินใบจองล่วงหน้าไม่ได้อยู่แล้วที่ฝั่ง service —
@@ -88,7 +103,21 @@ function AppointmentBoard() {
           ตารางจอง
         </h1>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-1 rounded-lg border p-0.5">
+          {(['day', 'week', 'month', 'year'] as const).map((v) => (
+            <Button
+              key={v}
+              type="button"
+              size="sm"
+              variant={view === v ? 'default' : 'ghost'}
+              onClick={() => void setView(v === 'day' ? null : v)}
+            >
+              {VIEW_LABEL[v]}
+            </Button>
+          ))}
+        </div>
+
+        <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
           {/* รูปเดียวกับช่องวันที่ทั้งระบบ — ไม่ใช่ `<input type="date">` ของเบราว์เซอร์ */}
           <AppDatePicker
             value={activeDate ?? ''}
@@ -106,76 +135,109 @@ function AppointmentBoard() {
         </div>
       </div>
 
-      {isError ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          {toErrorMessage(error)}
-        </div>
-      ) : null}
+      {view === 'week' ? (
+        <AppointmentWeekView
+          activeDate={activeDate ?? slots.data?.today ?? ''}
+          today={slots.data?.today ?? null}
+          onSelectDay={(d) => {
+            void setDate(d)
+            void setView(null)
+          }}
+          onChangeWeek={(d) => void setDate(d)}
+        />
+      ) : view === 'month' ? (
+        <AppointmentMonthView
+          activeDate={activeDate ?? slots.data?.today ?? ''}
+          today={slots.data?.today ?? null}
+          onSelectDay={(d) => {
+            void setDate(d)
+            void setView(null)
+          }}
+          onChangeMonth={(d) => void setDate(d)}
+        />
+      ) : view === 'year' ? (
+        <AppointmentYearView
+          activeDate={activeDate ?? slots.data?.today ?? ''}
+          onSelectMonth={(d) => {
+            void setDate(d)
+            void setView('month')
+          }}
+          onChangeYear={(d) => void setDate(d)}
+        />
+      ) : (
+        <>
+          {isError ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              {toErrorMessage(error)}
+            </div>
+          ) : null}
 
-      <div className="grid gap-3 overflow-y-auto sm:grid-cols-2 xl:grid-cols-4">
-        {SLOTS.map((slot) => {
-          const inSlot = rows.filter((r) => r.slot === slot)
+          <div className="grid gap-3 overflow-y-auto sm:grid-cols-2 xl:grid-cols-4">
+            {SLOTS.map((slot) => {
+              const inSlot = rows.filter((r) => r.slot === slot)
 
-          return (
-            <section
-              key={slot}
-              /* สูงตามเนื้อหา ไม่ยืดเต็มจอ — คอลัมน์ว่างสูง 600px คือพื้นที่ที่เสียเปล่า */
-              className="flex flex-col gap-2 self-start rounded-lg border bg-card p-2"
-            >
-              <header className="flex items-center justify-between px-1">
-                <h2 className="text-sm font-medium text-primary-strong">{SLOT_LABEL[slot]}</h2>
-                <span
-                  className={cn(
-                    'rounded px-1.5 py-0.5 text-xs',
-                    inSlot.length > 0
-                      ? 'bg-primary/10 text-primary-strong'
-                      : 'text-muted-foreground',
-                  )}
+              return (
+                <section
+                  key={slot}
+                  /* สูงตามเนื้อหา ไม่ยืดเต็มจอ — คอลัมน์ว่างสูง 600px คือพื้นที่ที่เสียเปล่า */
+                  className="flex flex-col gap-2 self-start rounded-lg border bg-card p-2"
                 >
-                  {inSlot.length} ราย
-                </span>
-              </header>
+                  <header className="flex items-center justify-between px-1">
+                    <h2 className="text-sm font-medium text-primary-strong">{SLOT_LABEL[slot]}</h2>
+                    <span
+                      className={cn(
+                        'rounded px-1.5 py-0.5 text-xs',
+                        inSlot.length > 0
+                          ? 'bg-primary/10 text-primary-strong'
+                          : 'text-muted-foreground',
+                      )}
+                    >
+                      {inSlot.length} ราย
+                    </span>
+                  </header>
 
-              {isPending ? (
-                <p className="px-1 text-sm text-muted-foreground">กำลังโหลด…</p>
-              ) : inSlot.length === 0 ? (
-                <p className="px-1 text-sm text-muted-foreground">ว่าง</p>
-              ) : (
-                inSlot.map((row) => (
-                  <AppointmentCard
-                    key={row.id}
-                    row={row}
-                    canWrite={canWrite}
-                    canArrive={!isFutureView}
-                    pending={checkIn.isPending || noShow.isPending || confirmAppt.isPending}
-                    onArrive={() =>
-                      void run(
-                        () => checkIn.mutateAsync({
-                          appointmentId: row.id,
-                          ownerId: null,
-                          petId: null,
-                          walkInPetName: null,
-                          walkInOwnerName: null,
-                          walkInOwnerPhone: null,
-                          triage: 'NORMAL',
-                          symptom: null,
-                          weightKg: null,
-                        }),
-                        'เปิดคิวแล้ว — ดูที่หน้าคิว',
-                      )
-                    }
-                    onNoShow={() => void run(() => noShow.mutateAsync(row.id), 'บันทึกว่าไม่มา')}
-                    onCancel={() => setPendingCancel(row)}
-                    onConfirm={() =>
-                      void run(() => confirmAppt.mutateAsync(row.id), 'ยืนยันคิวแล้ว')
-                    }
-                  />
-                ))
-              )}
-            </section>
-          )
-        })}
-      </div>
+                  {isPending ? (
+                    <p className="px-1 text-sm text-muted-foreground">กำลังโหลด…</p>
+                  ) : inSlot.length === 0 ? (
+                    <p className="px-1 text-sm text-muted-foreground">ว่าง</p>
+                  ) : (
+                    inSlot.map((row) => (
+                      <AppointmentCard
+                        key={row.id}
+                        row={row}
+                        canWrite={canWrite}
+                        canArrive={!isFutureView}
+                        pending={checkIn.isPending || noShow.isPending || confirmAppt.isPending}
+                        onArrive={() =>
+                          void run(
+                            () => checkIn.mutateAsync({
+                              appointmentId: row.id,
+                              ownerId: null,
+                              petId: null,
+                              walkInPetName: null,
+                              walkInOwnerName: null,
+                              walkInOwnerPhone: null,
+                              triage: 'NORMAL',
+                              symptom: null,
+                              weightKg: null,
+                            }),
+                            'เปิดคิวแล้ว — ดูที่หน้าคิว',
+                          )
+                        }
+                        onNoShow={() => void run(() => noShow.mutateAsync(row.id), 'บันทึกว่าไม่มา')}
+                        onCancel={() => setPendingCancel(row)}
+                        onConfirm={() =>
+                          void run(() => confirmAppt.mutateAsync(row.id), 'ยืนยันคิวแล้ว')
+                        }
+                      />
+                    ))
+                  )}
+                </section>
+              )
+            })}
+          </div>
+        </>
+      )}
 
       <AppointmentDialog open={createOpen} onOpenChange={setCreateOpen} />
 
