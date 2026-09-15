@@ -25,12 +25,15 @@ import type { DrugStockMovement } from '../../../prisma/generated/client.ts'
  * แก้จากที่เคยใช้ร่วมกับหน้ายา) เพราะคนที่ต้องเห็นสต็อก (หมอ ดูอย่างเดียว · เคาน์เตอร์
  * ดูและบันทึก) ไม่ใช่คนกลุ่มเดียวกับที่ควรแก้ทะเบียนยา/แผนก/ตำแหน่งได้
  *
- * **เส้นนี้รับได้แค่ `RECEIVE`/`ADJUST`** — `DISPENSE`/`DISPENSE_REVERSED` เป็นของที่
- * `visit-item.service` สร้างเองตอนจ่าย/ลบรายการจ่ายยา ไม่มีเส้น HTTP ให้เรียกตรง
+ * **เส้นนี้รับได้แค่ `ADJUST`** (ผู้ใช้ตัดสิน 2026-09-15 — เดิมรับ `RECEIVE` ด้วย) —
+ * เติมสต็อกฝั่งนี้ตรง ๆ ไม่ได้อีกแล้ว ต้อง "เบิกจากคลัง" ผ่าน
+ * `POST /api/warehouse-stock/withdraw` เท่านั้น (ซึ่งสร้างแถว `RECEIVE` ให้เองข้างใน)
+ * เหตุผลเดียวกับที่ `DISPENSE`/`DISPENSE_REVERSED` ไม่เคยเปิดให้เส้นนี้ตั้งค่าตรง —
+ * ของที่ระบบต้องเป็นคนสร้างเอง ไม่ใช่ของที่ผู้ใช้กรอกจำนวนเท่าไหร่ก็ได้
  */
 
 const LIST_QUERY_KEYS = new Set(['q'])
-const WRITE_FIELDS = new Set(['drugId', 'type', 'quantity', 'reason', 'expiresOn'])
+const WRITE_FIELDS = new Set(['drugId', 'type', 'quantity', 'reason'])
 
 /** วันที่-only ออกเป็น `YYYY-MM-DD` ไม่ใช่ ISO timestamp เต็ม — ไม่มีเวลาให้สื่อสาร */
 const dateOnlyWire = (d: Date | null) => (d === null ? null : d.toISOString().slice(0, 10))
@@ -70,10 +73,9 @@ const movementRowToWire = (row: DrugStockMovementRow) => ({
 const createSchema = t.Object(
   {
     drugId: t.Number(),
-    type: t.Union([t.Literal('RECEIVE'), t.Literal('ADJUST')]),
+    type: t.Literal('ADJUST'),
     quantity: t.String(),
     reason: t.Optional(t.Union([t.String(), t.Null()])),
-    expiresOn: t.Optional(t.Union([t.String(), t.Null()])),
   },
   { additionalProperties: false },
 )
@@ -121,7 +123,6 @@ export const drugStockRoutes = new Elysia({ prefix: '/api/drug-stock' })
           type: body.type,
           quantity: body.quantity,
           reason: body.reason ?? null,
-          expiresOn: body.expiresOn ?? null,
         },
         actor.userId,
       )
@@ -131,6 +132,6 @@ export const drugStockRoutes = new Elysia({ prefix: '/api/drug-stock' })
     {
       body: createSchema,
       transform: [guardDrugStockWrite, refuseUnknownFields(WRITE_FIELDS)],
-      detail: { tags: ['สต็อกยา'], summary: 'บันทึกรับเข้า/ปรับยอดสต็อกยา' },
+      detail: { tags: ['สต็อกยา'], summary: 'บันทึกปรับยอดสต็อกยา' },
     },
   )

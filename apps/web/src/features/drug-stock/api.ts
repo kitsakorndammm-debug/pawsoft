@@ -20,18 +20,17 @@ export type DrugStockBalance = {
 }
 
 /**
- * `DISPENSE`/`DISPENSE_REVERSED` ไม่มีในนี้ — เป็นของที่ BE สร้างเองตอนจ่าย/ลบรายการ
- * จ่ายยาในคิว ไม่มีเส้นให้เรียกตรงจากหน้านี้
+ * **มีแค่ `ADJUST`** (ผู้ใช้ตัดสิน 2026-09-15 — เดิมมี `RECEIVE` ด้วย) — เติมสต็อกฝั่งนี้
+ * ต้อง "เบิกจากคลัง" ผ่าน `warehouseStockApi.withdraw()` เท่านั้น ดู `///` บน
+ * `apps/api/src/modules/drug-stock/drug-stock.routes.ts`
  */
-export type DrugStockMovementType = 'RECEIVE' | 'ADJUST'
+export type DrugStockMovementType = 'ADJUST'
 
 export type CreateDrugStockMovementInput = {
   drugId: number
   type: DrugStockMovementType
   quantity: string
   reason: string | null
-  /** ใส่ได้เฉพาะตอน `type: 'RECEIVE'` — BE ปฏิเสธถ้าใส่ตอนปรับยอด */
-  expiresOn: string | null
 }
 
 export type DrugStockMovement = {

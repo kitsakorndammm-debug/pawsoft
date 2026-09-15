@@ -139,3 +139,22 @@ ALTER TABLE drug_stock_movement ADD CONSTRAINT drug_stock_movement_reason_check
 ALTER TABLE drug_stock_movement DROP CONSTRAINT IF EXISTS drug_stock_movement_expires_on_check;
 ALTER TABLE drug_stock_movement ADD CONSTRAINT drug_stock_movement_expires_on_check
   CHECK (expires_on IS NULL OR type = 'RECEIVE');
+
+-- ============================================================================
+-- warehouse_stock_movement
+-- ============================================================================
+
+COMMENT ON TABLE warehouse_stock_movement IS
+  'ประวัติคลังยา — สต็อกกลางที่แยกจากสต็อกที่หมอใช้จ่ายคนไข้ log ที่ไม่แก้ไม่ลบ จำนวนคงเหลือคือผลรวม quantity ต่อยาแต่ละตัว';
+COMMENT ON COLUMN warehouse_stock_movement.quantity IS 'มีเครื่องหมาย บวกคือเพิ่มคลัง ลบคือลดคลัง';
+COMMENT ON COLUMN warehouse_stock_movement.reason IS 'บังคับกรอกเฉพาะตอนปรับยอด (type = ADJUST)';
+
+-- ไม่มีค่า 0 — ไม่มีเหตุผลจะบันทึกรายการที่ไม่เปลี่ยนอะไรเลย
+ALTER TABLE warehouse_stock_movement DROP CONSTRAINT IF EXISTS warehouse_stock_movement_quantity_check;
+ALTER TABLE warehouse_stock_movement ADD CONSTRAINT warehouse_stock_movement_quantity_check
+  CHECK (quantity <> 0);
+
+-- ปรับยอดต้องอธิบายเหตุผล — ประเภทอื่นไม่บังคับ
+ALTER TABLE warehouse_stock_movement DROP CONSTRAINT IF EXISTS warehouse_stock_movement_reason_check;
+ALTER TABLE warehouse_stock_movement ADD CONSTRAINT warehouse_stock_movement_reason_check
+  CHECK (type <> 'ADJUST' OR btrim(coalesce(reason, '')) <> '');

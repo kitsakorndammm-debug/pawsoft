@@ -134,6 +134,18 @@ export const DRUG_STOCK_PERMISSION = {
   write: 'main:drug-stock:write',
 } as const
 
+/**
+ * สิทธิ์ของ**คลังยา** — แยกจาก `drug-stock` โดยตั้งใจ (ผู้ใช้ตัดสิน 2026-09-15)
+ *
+ * คลังยาเป็นเมนูคนละหน้ากับสต็อกที่หมอใช้จ่ายคนไข้ — ซื้อยาเข้าคลัง/ปรับยอดคลังเป็นงาน
+ * ของคนดูแลสต็อกกลาง ไม่ใช่ทุกคนที่เห็นสต็อกฝั่งหมอควรทำได้ ใช้ key ร่วมกันแปลว่าใคร
+ * ก็ตามที่ดูสต็อกหมอได้จะไปแก้ยอดคลังกลางได้ไปด้วยโดยไม่ได้ตั้งใจ
+ */
+export const DRUG_WAREHOUSE_PERMISSION = {
+  read: 'main:drug-warehouse:read',
+  write: 'main:drug-warehouse:write',
+} as const
+
 /** ทุก key ที่มีอยู่ตอนนี้ */
 export const PERMISSIONS: readonly PermissionDef[] = [
   {
@@ -207,6 +219,18 @@ export const PERMISSIONS: readonly PermissionDef[] = [
     label: 'บันทึกรับเข้า/ปรับยอดสต็อกยา',
     groupCode: 'drug-stock',
     groupName: 'สต็อกยา',
+  },
+  {
+    key: DRUG_WAREHOUSE_PERMISSION.read,
+    label: 'ดูยอดคงเหลือคลังยา',
+    groupCode: 'drug-warehouse',
+    groupName: 'คลังยา',
+  },
+  {
+    key: DRUG_WAREHOUSE_PERMISSION.write,
+    label: 'บันทึกซื้อเข้า/ปรับยอด/เบิกจากคลังยา',
+    groupCode: 'drug-warehouse',
+    groupName: 'คลังยา',
   },
 ]
 

@@ -11,6 +11,7 @@ import { employeeRoutes } from './modules/employee/employee.routes.ts'
 import { drugCategoryRoutes } from './modules/drug-category/drug-category.routes.ts'
 import { drugRoutes } from './modules/drug/drug.routes.ts'
 import { drugStockRoutes } from './modules/drug-stock/drug-stock.routes.ts'
+import { warehouseStockRoutes } from './modules/warehouse-stock/warehouse-stock.routes.ts'
 import { serviceCategoryRoutes } from './modules/service-category/service-category.routes.ts'
 import { serviceItemRoutes } from './modules/service-item/service-item.routes.ts'
 import { ownerRoutes } from './modules/owner/owner.routes.ts'
@@ -92,6 +93,7 @@ export const app = new Elysia()
   .use(drugCategoryRoutes)
   .use(drugRoutes)
   .use(drugStockRoutes)
+  .use(warehouseStockRoutes)
   .use(serviceCategoryRoutes)
   .use(serviceItemRoutes)
 

@@ -23,6 +23,7 @@ export const ROUTE_POSITIONS = '/settings/positions'
 export const ROUTE_EMPLOYEES = '/settings/employees'
 export const ROUTE_DRUGS = '/settings/drugs'
 export const ROUTE_DRUG_STOCK = '/settings/drug-stock'
+export const ROUTE_WAREHOUSE_STOCK = '/settings/warehouse-stock'
 export const ROUTE_SERVICE_ITEMS = '/settings/service-items'
 
 // ---- เมนูหน้างาน ----

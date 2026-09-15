@@ -7,10 +7,11 @@ import { readJson } from '../support/api-response.ts'
 import { loginAsAdmin } from '../support/login.ts'
 
 /**
- * `POST /api/drug-stock` · บันทึกรับเข้า/ปรับยอดสต็อกยา
+ * `POST /api/drug-stock` · บันทึกปรับยอดสต็อกยา
  *
- * **รับได้แค่ `type: RECEIVE | ADJUST`** — schema ของ body เองปฏิเสธค่าอื่นตั้งแต่ก่อน
- * ถึง service (ดู `///` บน `drug-stock.routes.ts`)
+ * **รับได้แค่ `type: ADJUST`** (ผู้ใช้ตัดสิน 2026-09-15 — เดิมรับ `RECEIVE` ด้วย) —
+ * เติมสต็อกฝั่งนี้ต้อง "เบิกจากคลัง" ผ่าน `POST /api/warehouse-stock/withdraw` เท่านั้น
+ * ดู `///` บน `drug-stock.routes.ts`
  */
 
 const NAME_PREFIX = 'TEST-STOCK-API-CREATE-'
@@ -28,6 +29,13 @@ async function makeDrug(suffix: string) {
       createdBy: SYSTEM_USER_ID,
       updatedBy: SYSTEM_USER_ID,
     },
+  })
+}
+
+/** ตั้งยอดคงเหลือให้พร้อมทดสอบปรับยอด — เขียนตรงเข้าฐาน ไม่ผ่าน HTTP เพราะเส้นนี้รับ RECEIVE ไม่ได้อีกแล้ว */
+async function seedBalance(drugId: bigint, quantity: string) {
+  await db.drugStockMovement.create({
+    data: { drugId, type: 'RECEIVE', quantity, createdBy: SYSTEM_USER_ID },
   })
 }
 
@@ -54,24 +62,9 @@ function post(body: unknown, withCookie = true) {
 }
 
 describe('POST /api/drug-stock', () => {
-  test('รับเข้ายา → 201 ชนิดบนสายถูกต้อง', async () => {
-    const drug = await makeDrug('RECEIVE')
-
-    const res = await post({ drugId: Number(drug.id), type: 'RECEIVE', quantity: '15' })
-    const body = await readJson(res)
-
-    expect(res.status).toBe(201)
-    expect(body.ok).toBe(true)
-    expect(typeof body.data.id).toBe('number')
-    expect(body.data.drugId).toBe(Number(drug.id))
-    expect(body.data.type).toBe('RECEIVE')
-    expect(body.data.quantity).toBe('15')
-    expect(typeof body.data.createdAt).toBe('string')
-  })
-
   test('ปรับยอดพร้อมเหตุผล → 201', async () => {
     const drug = await makeDrug('ADJUST')
-    await post({ drugId: Number(drug.id), type: 'RECEIVE', quantity: '10' })
+    await seedBalance(drug.id, '10')
 
     const res = await post({
       drugId: Number(drug.id),
@@ -82,7 +75,13 @@ describe('POST /api/drug-stock', () => {
     const body = await readJson(res)
 
     expect(res.status).toBe(201)
+    expect(body.ok).toBe(true)
+    expect(typeof body.data.id).toBe('number')
+    expect(body.data.drugId).toBe(Number(drug.id))
+    expect(body.data.type).toBe('ADJUST')
+    expect(body.data.quantity).toBe('-2')
     expect(body.data.reason).toBe('นับสต็อกจริงไม่ตรง')
+    expect(typeof body.data.createdAt).toBe('string')
   })
 
   test('ปรับยอดไม่กรอกเหตุผล → 400 INVALID', async () => {
@@ -95,36 +94,12 @@ describe('POST /api/drug-stock', () => {
     expect(body.error?.code).toBe('INVALID')
   })
 
-  test('รับเข้าพร้อมวันหมดอายุ → 201 คืนวันหมดอายุมาด้วย', async () => {
-    const drug = await makeDrug('RECEIVE-EXPIRES')
+  test('ส่ง type เป็น RECEIVE ตรงๆ → schema ปฏิเสธก่อนถึง service (ต้องเบิกจากคลังแทน)', async () => {
+    const drug = await makeDrug('RECEIVE-BLOCK')
 
-    const res = await post({
-      drugId: Number(drug.id),
-      type: 'RECEIVE',
-      quantity: '10',
-      expiresOn: '2027-06-30',
-    })
-    const body = await readJson(res)
-
-    expect(res.status).toBe(201)
-    expect(body.data.expiresOn).toBe('2027-06-30')
-  })
-
-  test('ปรับยอดพร้อมวันหมดอายุ → 400 INVALID', async () => {
-    const drug = await makeDrug('ADJUST-EXPIRES-BLOCK')
-    await post({ drugId: Number(drug.id), type: 'RECEIVE', quantity: '10' })
-
-    const res = await post({
-      drugId: Number(drug.id),
-      type: 'ADJUST',
-      quantity: '-1',
-      reason: 'ทดสอบ',
-      expiresOn: '2027-06-30',
-    })
-    const body = await readJson(res)
+    const res = await post({ drugId: Number(drug.id), type: 'RECEIVE', quantity: '15' })
 
     expect(res.status).toBe(400)
-    expect(body.error?.code).toBe('INVALID')
   })
 
   test('ส่ง type เป็น DISPENSE ตรงๆ → schema ปฏิเสธก่อนถึง service', async () => {
@@ -137,11 +112,13 @@ describe('POST /api/drug-stock', () => {
 
   test('ส่งฟิลด์ที่ไม่รู้จัก → 400', async () => {
     const drug = await makeDrug('UNKNOWN-FIELD')
+    await seedBalance(drug.id, '10')
 
     const res = await post({
       drugId: Number(drug.id),
-      type: 'RECEIVE',
-      quantity: '5',
+      type: 'ADJUST',
+      quantity: '-1',
+      reason: 'ทดสอบ',
       lotNumber: 'X1',
     })
 
@@ -149,7 +126,12 @@ describe('POST /api/drug-stock', () => {
   })
 
   test('ไม่มียาตัวนี้ → 404', async () => {
-    const res = await post({ drugId: 999_999_999, type: 'RECEIVE', quantity: '5' })
+    const res = await post({
+      drugId: 999_999_999,
+      type: 'ADJUST',
+      quantity: '-1',
+      reason: 'ทดสอบ',
+    })
     const body = await readJson(res)
 
     expect(res.status).toBe(404)
@@ -159,7 +141,10 @@ describe('POST /api/drug-stock', () => {
   test('ไม่ได้ล็อกอิน → 401', async () => {
     const drug = await makeDrug('NO-LOGIN')
 
-    const res = await post({ drugId: Number(drug.id), type: 'RECEIVE', quantity: '5' }, false)
+    const res = await post(
+      { drugId: Number(drug.id), type: 'ADJUST', quantity: '-1', reason: 'ทดสอบ' },
+      false,
+    )
 
     expect(res.status).toBe(401)
   })

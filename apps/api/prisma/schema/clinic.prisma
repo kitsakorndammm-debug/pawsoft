@@ -88,6 +88,9 @@ model Drug {
   /// ประวัติสต็อก — รับเข้า/จ่ายออก/ปรับยอดของยาตัวนี้ทั้งหมด
   stockMovements DrugStockMovement[]
 
+  /// ประวัติคลังยา — ซื้อเข้า/เบิกออกไปเป็นสต็อกที่หมอใช้/ปรับยอดของยาตัวนี้ทั้งหมด
+  warehouseMovements WarehouseStockMovement[]
+
   /// เลิกใช้แล้ว — ยังอยู่ในประวัติการรักษาเก่า แต่ไม่ให้เลือกในรายการใหม่
   ///
   /// คนละเรื่องกับการลบ · ลบคือแถวที่สร้างผิด · เลิกใช้คือยาที่เคยใช้จริงแต่วันนี้ไม่มีแล้ว
@@ -167,6 +170,50 @@ model DrugStockMovement {
   @@index([visitDrugId])
   @@index([createdAt])
   @@map("drug_stock_movement")
+}
+
+enum WarehouseStockMovementType {
+  /// ซื้อเข้าคลัง — จากซัพพลายเออร์
+  RECEIVE
+
+  /// เบิกออกจากคลัง ไปเป็นสต็อกที่หมอใช้จ่ายคนไข้ (สร้างแถว `RECEIVE` คู่กันใน
+  /// `DrugStockMovement` เสมอ ในทรานแซกชันเดียวกัน) · `quantity` เป็นลบเสมอ
+  WITHDRAW
+
+  /// ปรับยอด — นับคลังจริงไม่ตรง ของเสีย หรือหมดอายุ · บวกหรือลบก็ได้ · **ต้องมี `reason`**
+  ADJUST
+}
+
+/// ประวัติคลังยา — สต็อกกลางของคลินิกที่แยกจากสต็อกที่หมอใช้จ่ายคนไข้ (`DrugStockMovement`)
+///
+/// **สองชั้น ไม่ใช่ชั้นเดียว** (ผู้ใช้ตัดสิน 2026-09-15) — คลังยาคือของที่ซื้อเข้ามาเก็บไว้
+/// ส่วน `DrugStockMovement` คือของที่พร้อมให้หมอจ่ายจริง พนักงานต้อง "เบิก" จากคลังมาเติม
+/// สต็อกฝั่งนั้นก่อน ไม่ใช่เติมสต็อกฝั่งหมอได้เองตรง ๆ โดยไม่ผ่านคลัง
+///
+/// เป็น log ที่ไม่แก้ไม่ลบ แก้ยอดผิดด้วยการเพิ่มแถว `ADJUST` — โครงเดียวกับ
+/// `DrugStockMovement` ทุกกฎที่ตารางนั้นมี (ยอดคงเหลือ = ผลรวม `quantity` · ห้ามติดลบ ·
+/// `reason` บังคับเฉพาะ `ADJUST`) ใช้กับตารางนี้เหมือนกัน
+model WarehouseStockMovement {
+  id BigInt @id @default(autoincrement())
+
+  drugId BigInt @map("drug_id")
+  drug   Drug   @relation(fields: [drugId], references: [id], onDelete: Restrict)
+
+  type WarehouseStockMovementType
+
+  /// จำนวนที่เปลี่ยน — มีเครื่องหมาย บวกคือเพิ่มคลัง ลบคือลดคลัง
+  quantity Decimal @db.Decimal(10, 2)
+
+  /// เหตุผล — บังคับกรอกเฉพาะตอน `type = ADJUST` (บังคับที่ฐานด้วย CHECK)
+  reason String? @db.VarChar(500)
+
+  /// ใครเป็นคนบันทึกรายการนี้
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy BigInt   @map("created_by")
+
+  @@index([drugId])
+  @@index([createdAt])
+  @@map("warehouse_stock_movement")
 }
 
 /// หมวดบริการ — ตรวจ · ผ่าตัด · วัคซีน · อาบน้ำ

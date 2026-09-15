@@ -4,8 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { type CreateDrugStockMovementInput, drugStockApi } from './api'
 
-const LIST_ROOT = ['drug-stock', 'list'] as const
-const MOVEMENTS_ROOT = ['drug-stock', 'movements'] as const
+// exported เพราะ `warehouse-stock` ต้อง invalidate คู่กัน — เบิกจากคลังแล้วสต็อกฝั่งนี้
+// เปลี่ยนไปด้วยเสมอ (ดู `useWithdrawFromWarehouse`)
+export const LIST_ROOT = ['drug-stock', 'list'] as const
+export const MOVEMENTS_ROOT = ['drug-stock', 'movements'] as const
 
 export function useDrugStockBalances(
   q: string,

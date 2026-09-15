@@ -10,80 +10,55 @@ import { PageHint } from '@/components/common/page-hint'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useCan } from '@/features/auth/hooks'
-import type { DrugStockBalance } from '@/features/drug-stock/api'
-import { useDrugStockBalances } from '@/features/drug-stock/hooks'
+import type { WarehouseStockBalance } from '@/features/warehouse-stock/api'
+import { useWarehouseStockBalances } from '@/features/warehouse-stock/hooks'
 import { toErrorMessage } from '@/lib/api-client'
-import { formatDate } from '@/lib/format'
-import { DRUG_STOCK_WRITE } from '@/lib/permissions'
+import { DRUG_WAREHOUSE_WRITE } from '@/lib/permissions'
 import { useDebounce } from '@/lib/use-debounce'
 
-import { DrugStockDialog } from './drug-stock-dialog'
-import { DrugStockHistoryDialog } from './drug-stock-history-dialog'
+import { WarehouseStockDialog } from './warehouse-stock-dialog'
+import { WarehouseStockHistoryDialog } from './warehouse-stock-history-dialog'
 
 const NOUN = 'ยา'
 
-/** ใกล้หมดอายุภายในกี่วันถึงจะไฮไลต์เตือน — หมดอายุแล้วไฮไลต์เสมอไม่ว่ากี่วัน */
-const EXPIRY_WARN_DAYS = 30
-
-function expiryClassName(nearestExpiry: string | null): string | undefined {
-  if (nearestExpiry === null) return undefined
-
-  const days = (new Date(nearestExpiry).getTime() - Date.now()) / 86_400_000
-  if (days < 0) return 'text-destructive font-medium'
-  if (days <= EXPIRY_WARN_DAYS) return 'text-amber-600 font-medium'
-
-  return undefined
-}
-
-export default function DrugStockPage() {
+export default function WarehouseStockPage() {
   /**
    * `useQueryState` อ่าน `useSearchParams` ข้างใน ซึ่ง Next บังคับให้อยู่ใน `Suspense`
    * ไม่ห่อแล้ว `next build` ตกทั้งหน้า ทั้งที่ `dev` กับ `typecheck` เขียวสนิท
    */
   return (
     <Suspense fallback={null}>
-      <DrugStockList />
+      <WarehouseStockList />
     </Suspense>
   )
 }
 
-function DrugStockList() {
+function WarehouseStockList() {
   const [search, setSearch] = useQueryState('q', { defaultValue: '', clearOnDefault: true })
   const debouncedSearch = useDebounce(search, 300)
   const isSearching = debouncedSearch.length > 0
 
-  const canWrite = useCan(DRUG_STOCK_WRITE)
+  const canWrite = useCan(DRUG_WAREHOUSE_WRITE)
 
-  const { data: rows, isPending, isFetching, isError, error } = useDrugStockBalances(debouncedSearch)
+  const { data: rows, isPending, isFetching, isError, error } = useWarehouseStockBalances(debouncedSearch)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [history, setHistory] = useState<{ drugId: number; drugName: string } | null>(null)
 
-  const columns: DataTableColumn<DrugStockBalance>[] = [
+  const columns: DataTableColumn<WarehouseStockBalance>[] = [
     { key: 'name', title: `ชื่อ${NOUN}`, dataIndex: 'name', truncate: true },
     { key: 'code', title: 'รหัส', dataIndex: 'code', width: 120 },
     { key: 'unit', title: 'หน่วย', dataIndex: 'unit', width: 100 },
     {
       key: 'quantity',
-      title: 'คงเหลือ',
-      width: 120,
+      title: 'คงเหลือในคลัง',
+      width: 140,
       align: 'right',
       render: (row) => (
         <span className={Number(row.quantity) <= 0 ? 'text-destructive' : undefined}>
           {row.quantity}
         </span>
       ),
-    },
-    {
-      key: 'nearestExpiry',
-      title: 'วันหมดอายุ',
-      width: 130,
-      render: (row) =>
-        row.nearestExpiry ? (
-          <span className={expiryClassName(row.nearestExpiry)}>{formatDate(row.nearestExpiry)}</span>
-        ) : (
-          '—'
-        ),
     },
     {
       key: 'status',
@@ -106,7 +81,7 @@ function DrugStockList() {
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={`ดูประวัติสต็อก ${row.name}`}
+                  aria-label={`ดูประวัติคลัง ${row.name}`}
                   className="text-primary-strong hover:bg-primary/10"
                   onClick={() => setHistory({ drugId: row.id, drugName: row.name })}
                 >
@@ -114,7 +89,7 @@ function DrugStockList() {
                 </Button>
               }
             />
-            <TooltipContent>{`ดูประวัติสต็อก ${row.name}`}</TooltipContent>
+            <TooltipContent>{`ดูประวัติคลัง ${row.name}`}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -139,12 +114,11 @@ function DrugStockList() {
       />
 
       <PageHint>
-        ยอดคงเหลือคือผลรวมประวัติเบิกจากคลัง/จ่ายออก/ปรับยอดของยาแต่ละตัว — จ่ายยาในคิวตัดสต็อกให้เองอัตโนมัติ
-        เติมยอดที่นี่ทำได้ด้วยการ "เบิกจากคลัง" เท่านั้น (ดูยอดคลังได้ที่เมนู "คลังยา") ·
-        วันหมดอายุคือล็อตที่ใกล้หมดอายุที่สุดจากที่เบิกมา
+        คลังยาคือสต็อกกลางที่แยกจากสต็อกที่หมอใช้จ่ายคนไข้ — ซื้อยาเข้ามาเก็บที่นี่ก่อน แล้วให้พนักงาน
+        "เบิกจากคลัง" ไปเติมสต็อกที่หมอใช้ (ทำได้ที่หน้า "สต็อกยา")
       </PageHint>
 
-      <DataTable<DrugStockBalance>
+      <DataTable<WarehouseStockBalance>
         className="min-h-0 flex-1"
         columns={columns}
         data={rows ?? []}
@@ -155,9 +129,9 @@ function DrugStockList() {
         }
       />
 
-      <DrugStockDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <WarehouseStockDialog open={dialogOpen} onOpenChange={setDialogOpen} />
 
-      <DrugStockHistoryDialog
+      <WarehouseStockHistoryDialog
         drugId={history?.drugId ?? null}
         drugName={history?.drugName ?? ''}
         open={history !== null}

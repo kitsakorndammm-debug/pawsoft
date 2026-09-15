@@ -8,6 +8,7 @@ import {
   Pill,
   ShieldCheck,
   Stethoscope,
+  Warehouse,
   type LucideIcon,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -16,13 +17,14 @@ import { useState } from 'react'
 
 import { SearchInput } from '@/components/common/search-input'
 import { useCan, useCanAny } from '@/features/auth/hooks'
-import { DRUG_STOCK_READ, HR_READ, MASTER_READ } from '@/lib/permissions'
+import { DRUG_STOCK_READ, DRUG_WAREHOUSE_READ, HR_READ, MASTER_READ } from '@/lib/permissions'
 import {
   ROUTE_DEPARTMENTS,
   ROUTE_EMPLOYEES,
   ROUTE_POSITIONS,
   ROUTE_DRUGS,
   ROUTE_DRUG_STOCK,
+  ROUTE_WAREHOUSE_STOCK,
   ROUTE_ROLES,
   ROUTE_SERVICE_ITEMS,
   ROUTE_SETTINGS,
@@ -71,8 +73,18 @@ const SETTINGS_GROUPS: SiderGroup[] = [
   {
     label: 'คลินิก',
     /* หมวดของทั้งคู่จัดการจากในหน้าของมันเอง จึงไม่มีรายการหมวดที่นี่ */
+    /*
+     * ยาและเวชภัณฑ์ (ทะเบียน) → คลังยา (ซื้อเข้ามาเก็บ) → สต็อกยา (เบิกมาให้หมอจ่าย) —
+     * เรียงตามเส้นทางที่ยาเดินจริงในคลินิก
+     */
     items: [
       { label: 'ยาและเวชภัณฑ์', icon: Pill, href: ROUTE_DRUGS, permission: MASTER_READ },
+      {
+        label: 'คลังยา',
+        icon: Warehouse,
+        href: ROUTE_WAREHOUSE_STOCK,
+        permission: DRUG_WAREHOUSE_READ,
+      },
       { label: 'สต็อกยา', icon: Boxes, href: ROUTE_DRUG_STOCK, permission: DRUG_STOCK_READ },
       { label: 'รายการรักษา', icon: Stethoscope, href: ROUTE_SERVICE_ITEMS, permission: MASTER_READ },
     ],

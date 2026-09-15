@@ -3,6 +3,7 @@ import { invalid } from './app-error.ts'
 import {
   BILLING_PERMISSION,
   DRUG_STOCK_PERMISSION,
+  DRUG_WAREHOUSE_PERMISSION,
   HR_PERMISSION,
   MASTER_PERMISSION,
   MEDICAL_PERMISSION,
@@ -82,6 +83,16 @@ export const guardDrugStockRead = silent((ctx) =>
 )
 export const guardDrugStockWrite = silent((ctx) =>
   requirePermission(ctx, DRUG_STOCK_PERMISSION.write),
+)
+
+/**
+ * คลังยา — แยกจาก `drug-stock` (ผู้ใช้ตัดสิน 2026-09-15) ดู `///` บน `DRUG_WAREHOUSE_PERMISSION`
+ */
+export const guardDrugWarehouseRead = silent((ctx) =>
+  requirePermission(ctx, DRUG_WAREHOUSE_PERMISSION.read),
+)
+export const guardDrugWarehouseWrite = silent((ctx) =>
+  requirePermission(ctx, DRUG_WAREHOUSE_PERMISSION.write),
 )
 
 
@@ -192,6 +203,7 @@ export { getActor }
 export {
   BILLING_PERMISSION,
   DRUG_STOCK_PERMISSION,
+  DRUG_WAREHOUSE_PERMISSION,
   HR_PERMISSION,
   MASTER_PERMISSION,
   MEDICAL_PERMISSION,

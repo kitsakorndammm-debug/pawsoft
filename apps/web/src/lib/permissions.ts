@@ -43,3 +43,6 @@ export const BILLING_VERIFY = 'main:billing:verify'
 /** สต็อกยา — แยกจาก `MASTER_*` (ผู้ใช้ตัดสิน 2026-09-08) หมอดูได้ เคาน์เตอร์ดู+บันทึกได้ */
 export const DRUG_STOCK_READ = 'main:drug-stock:read'
 export const DRUG_STOCK_WRITE = 'main:drug-stock:write'
+
+export const DRUG_WAREHOUSE_READ = 'main:drug-warehouse:read'
+export const DRUG_WAREHOUSE_WRITE = 'main:drug-warehouse:write'
