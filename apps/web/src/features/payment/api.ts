@@ -71,10 +71,24 @@ export type InvoiceLine = {
   dosage: string | null
 }
 
+/**
+ * คิวที่ใบนี้มาจาก — **บัญชีต้องรู้ว่า "ของใคร" ก่อนกดยืนยัน** (ผู้ใช้ขอ 2026-09-15)
+ * ชื่อจริงถ้าลงทะเบียนแล้ว ไม่งั้นใช้ชื่อที่กรอกหน้างาน (`ownerPhone` เป็น `null`
+ * เมื่อเป็นลูกค้า walk-in ที่ไม่มีทะเบียน)
+ */
+export type InvoiceVisitSummary = {
+  queueNumber: number
+  queueDate: string
+  ownerName: string | null
+  ownerPhone: string | null
+  petName: string | null
+}
+
 export type Invoice = {
   id: number
   code: string
   visitId: number
+  visit: InvoiceVisitSummary
   status: InvoiceStatus
   subtotal: string
   discount: string

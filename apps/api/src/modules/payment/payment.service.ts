@@ -636,7 +636,51 @@ export type InvoiceLine = {
   dosage: string | null
 }
 
-export type InvoiceWithPayments = Invoice & { payments: Payment[]; lines: InvoiceLine[] }
+/**
+ * สรุปคิวของใบเสร็จ — **ชื่อจริงถ้าลงทะเบียนแล้ว ไม่งั้นใช้ชื่อที่กรอกหน้างาน**
+ *
+ * (ผู้ใช้ขอ 2026-09-15: "ควรบอกชื่อของผู้ใช้ด้วย") — บัญชีที่กดยืนยันยอดต้องรู้ว่า
+ * "ของใคร" ก่อนกดยืนยัน ไม่ใช่แค่เลขที่ใบกับยอดเงิน
+ */
+export type InvoiceVisitSummary = {
+  queueNumber: number
+  queueDate: Date
+  ownerName: string | null
+  ownerPhone: string | null
+  petName: string | null
+}
+
+export type InvoiceWithPayments = Invoice & {
+  payments: Payment[]
+  lines: InvoiceLine[]
+  visit: InvoiceVisitSummary
+}
+
+const VISIT_SUMMARY_SELECT = {
+  queueNumber: true,
+  queueDate: true,
+  walkInOwnerName: true,
+  walkInPetName: true,
+  owner: { select: { name: true, phone: true } },
+  pet: { select: { name: true } },
+} as const
+
+function visitSummaryOf(visit: {
+  queueNumber: number
+  queueDate: Date
+  walkInOwnerName: string | null
+  walkInPetName: string | null
+  owner: { name: string; phone: string | null } | null
+  pet: { name: string } | null
+}): InvoiceVisitSummary {
+  return {
+    queueNumber: visit.queueNumber,
+    queueDate: visit.queueDate,
+    ownerName: visit.owner?.name ?? visit.walkInOwnerName,
+    ownerPhone: visit.owner?.phone ?? null,
+    petName: visit.pet?.name ?? visit.walkInPetName,
+  }
+}
 
 /** รายการของคิวหนึ่ง แปลงเป็นบรรทัดบนใบเสร็จ */
 async function linesOfVisit(visitId: bigint, tx?: Tx): Promise<InvoiceLine[]> {
@@ -672,11 +716,18 @@ async function linesOfVisit(visitId: bigint, tx?: Tx): Promise<InvoiceLine[]> {
 export async function getInvoiceDetail(id: bigint, tx?: Tx): Promise<InvoiceWithPayments> {
   const row = await (tx ?? db).invoice.findFirst({
     where: { id, deletedAt: null },
-    include: { payments: { orderBy: { id: 'asc' } } },
+    include: {
+      payments: { orderBy: { id: 'asc' } },
+      visit: { select: VISIT_SUMMARY_SELECT },
+    },
   })
   if (!row) throw notFound('ไม่พบใบเสร็จนี้', { id: String(id) })
 
-  return { ...row, lines: await linesOfVisit(row.visitId, tx) }
+  return {
+    ...row,
+    lines: await linesOfVisit(row.visitId, tx),
+    visit: visitSummaryOf(row.visit),
+  }
 }
 
 /** ใบเสร็จของคิวหนึ่ง — `null` เมื่อยังไม่ได้ออกใบ */
@@ -690,11 +741,18 @@ export async function findInvoiceByVisit(
      * ไม่ใช่ค้างอยู่กับใบที่ตายแล้ว (แก้ 2026-09-01)
      */
     where: { visitId, deletedAt: null, status: { not: 'VOID' } },
-    include: { payments: { orderBy: { id: 'asc' } } },
+    include: {
+      payments: { orderBy: { id: 'asc' } },
+      visit: { select: VISIT_SUMMARY_SELECT },
+    },
   })
   if (row === null) return null
 
-  return { ...row, lines: await linesOfVisit(visitId, tx) }
+  return {
+    ...row,
+    lines: await linesOfVisit(visitId, tx),
+    visit: visitSummaryOf(row.visit),
+  }
 }
 
 export const INVOICE_PAGE_SIZE = 50
@@ -751,7 +809,10 @@ export async function listInvoices(
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip: (page - 1) * pageSize,
       take: pageSize,
-      include: { payments: { orderBy: { id: 'asc' } } },
+      include: {
+        payments: { orderBy: { id: 'asc' } },
+        visit: { select: VISIT_SUMMARY_SELECT },
+      },
     }),
     at.invoice.count({ where }),
   ])
@@ -759,8 +820,15 @@ export async function listInvoices(
   /**
    * **ลิสต์ไม่ดึงรายการ** — ห้าสิบใบก็ร้อยคิวรี และตารางไม่ได้แสดงมันอยู่แล้ว ·
    * คนที่อยากเห็นรายการกดเปิดใบ ซึ่งไปที่ `getInvoiceDetail`
+   *
+   * **แต่พ่วงชื่อเจ้าของ/สัตว์มาด้วย** — คนละอย่างกับรายการ นี่คือของที่ตารางลิสต์
+   * ต้องโชว์เป็นคอลัมน์ (ผู้ใช้ขอ 2026-09-15) ไม่ใช่ของที่รอเปิดใบถึงจะเห็น
    */
-  const rows = found.map((r) => ({ ...r, lines: [] as InvoiceLine[] }))
+  const rows = found.map((r) => ({
+    ...r,
+    lines: [] as InvoiceLine[],
+    visit: visitSummaryOf(r.visit),
+  }))
 
   return { rows, page, pageSize, total }
 }
@@ -792,10 +860,13 @@ export async function requireOwnInvoice(
   if (found === 0) throw notFound('ไม่พบใบเสร็จนี้')
 }
 
-export type MyInvoiceRow = InvoiceWithPayments & {
-  /** คิวที่ใบนี้มาจาก — ลูกค้าจำวันกับชื่อสัตว์ ไม่ได้จำเลขใบ */
-  visit: { queueNumber: number; queueDate: Date; petName: string | null }
-}
+/**
+ * เหมือน `InvoiceWithPayments` ทุกอย่าง — ใช้ชื่อแยกไว้เพื่อให้อ่านง่ายที่ฝั่ง route
+ * ว่าเป็นแถวของลูกค้า แม้โครงข้อมูลจะเหมือนกัน (`visit` มี `ownerName`/`ownerPhone`
+ * ติดมาด้วยเหมือนกัน แต่ `toMyWire` เลือกไม่ส่งสองฟิลด์นั้นออกไป — เป็นตัวเอง
+ * ไม่ต้องมีใครบอกชื่อตัวเอง)
+ */
+export type MyInvoiceRow = InvoiceWithPayments
 
 /**
  * ใบเสร็จของฉัน — **ใบที่ยกเลิกไม่โผล่**
@@ -829,14 +900,7 @@ export async function listMyInvoices(
       take: pageSize,
       include: {
         payments: { orderBy: { id: 'asc' } },
-        visit: {
-          select: {
-            queueNumber: true,
-            queueDate: true,
-            walkInPetName: true,
-            pet: { select: { name: true } },
-          },
-        },
+        visit: { select: VISIT_SUMMARY_SELECT },
       },
     }),
     at.invoice.count({ where }),
@@ -846,11 +910,7 @@ export async function listMyInvoices(
     ...r,
     // ลิสต์ไม่ดึงรายการ — เหตุผลเดียวกับ `listInvoices`
     lines: [] as InvoiceLine[],
-    visit: {
-      queueNumber: r.visit.queueNumber,
-      queueDate: r.visit.queueDate,
-      petName: r.visit.pet?.name ?? r.visit.walkInPetName,
-    },
+    visit: visitSummaryOf(r.visit),
   }))
 
   return { rows, page, pageSize, total }
@@ -869,24 +929,13 @@ export async function getMyInvoiceDetail(
     where: { id: invoiceId, deletedAt: null },
     include: {
       payments: { orderBy: { id: 'asc' } },
-      visit: {
-        select: {
-          queueNumber: true,
-          queueDate: true,
-          walkInPetName: true,
-          pet: { select: { name: true } },
-        },
-      },
+      visit: { select: VISIT_SUMMARY_SELECT },
     },
   })
 
   return {
     ...row,
     lines: await linesOfVisit(row.visitId, tx),
-    visit: {
-      queueNumber: row.visit.queueNumber,
-      queueDate: row.visit.queueDate,
-      petName: row.visit.pet?.name ?? row.visit.walkInPetName,
-    },
+    visit: visitSummaryOf(row.visit),
   }
 }

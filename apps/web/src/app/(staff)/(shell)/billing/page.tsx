@@ -1,6 +1,6 @@
 'use client'
 
-import { CheckCircle2, Receipt, Undo2, UserRound, Wallet } from 'lucide-react'
+import { CheckCircle2, Pill, Receipt, Stethoscope, Undo2, UserRound, Wallet } from 'lucide-react'
 import { useQueryState } from 'nuqs'
 import { Suspense, useState } from 'react'
 import { toast } from 'sonner'
@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label'
 import { useCan } from '@/features/auth/hooks'
 import {
   INVOICE_PAGE_SIZE,
+  useInvoice,
   useInvoices,
   useRejectInvoice,
   useVerifyInvoice,
@@ -31,9 +32,11 @@ import {
   PAYMENT_METHOD_LABEL,
   slipUrl,
   type Invoice,
+  type InvoiceLine,
   type InvoiceStatus,
 } from '@/features/payment/api'
 import { toErrorMessage } from '@/lib/api-client'
+import { formatDate } from '@/lib/format'
 import { BILLING_VERIFY } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 
@@ -93,6 +96,19 @@ function BillingBoard() {
 
   const columns: DataTableColumn<Invoice>[] = [
     { key: 'code', title: 'เลขที่', width: 160, dataIndex: 'code' },
+    {
+      key: 'customer',
+      title: 'ลูกค้า',
+      truncate: true,
+      render: (row) => (
+        <span className="flex flex-col">
+          <span className="truncate">{row.visit.ownerName ?? '—'}</span>
+          <span className="truncate text-xs text-muted-foreground">
+            {row.visit.petName ?? 'ไม่ระบุสัตว์'}
+          </span>
+        </span>
+      ),
+    },
     {
       key: 'total',
       title: 'ยอด',
@@ -295,17 +311,15 @@ function BillingBoard() {
       />
 
       <InvoiceDetailDialog
-        invoice={detail}
+        invoiceId={detail?.id ?? null}
         open={detail !== null}
         onOpenChange={(next) => !next && setDetail(null)}
       />
 
-      <ConfirmDialog
+      <VerifyInvoiceDialog
+        invoice={pendingVerify}
         open={pendingVerify !== null}
         onOpenChange={(next) => !next && setPendingVerify(null)}
-        title="ยืนยันยอด"
-        description={`ยืนยันว่ายอด ${pendingVerify?.total ?? ''} บาทของ ${pendingVerify?.code ?? ''} ถูกต้องและรับเงินครบแล้ว — หลังจากนี้แก้ไม่ได้อีก`}
-        actionText="ยืนยันยอด"
         onAction={async () => {
           if (!pendingVerify) return
           await run(() => verify.mutateAsync(pendingVerify.id), `ยืนยัน ${pendingVerify.code} แล้ว`)
@@ -324,16 +338,203 @@ function BillingBoard() {
   )
 }
 
-/** กล่องดูรายละเอียด — อ่านอย่างเดียว */
-function InvoiceDetailDialog({
+/** หนึ่งบรรทัดของรายการที่คิดเงิน — บริการหรือยา */
+/**
+ * กล่องยืนยันยอด — **โชว์รายละเอียดเต็มก่อนกดยืนยัน ไม่ใช่แค่เลขที่ใบกับยอดรวม**
+ *
+ * (ผู้ใช้ขอ 2026-09-15) ตารางลิสต์ไม่มี `lines` (ดู `listInvoices` ฝั่ง BE) จึงต้อง
+ * โหลดใบแบบเต็มเองที่นี่ — `pendingVerify` ที่ส่งมาจากแถวในตารางมีแค่ยอดสรุป
+ */
+function VerifyInvoiceDialog({
   invoice,
   open,
   onOpenChange,
+  onAction,
+  pending,
 }: {
   invoice: Invoice | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onAction: () => void
+  pending: boolean
 }) {
+  const { data: detail, isPending, isError, error } = useInvoice(open ? (invoice?.id ?? null) : null)
+
+  return (
+    <ConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`ยืนยันยอด ${invoice?.code ?? ''}`}
+      description={
+        isPending ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">กำลังโหลด…</p>
+        ) : isError ? (
+          <p className="text-sm text-destructive">{toErrorMessage(error)}</p>
+        ) : detail ? (
+          <div className="flex flex-col gap-3">
+            <p>ตรวจรายละเอียดด้านล่างให้ตรงกับที่ได้รับเงินจริง — ยืนยันแล้วแก้ไม่ได้อีก</p>
+            <InvoiceSummaryContent invoice={detail} />
+          </div>
+        ) : null
+      }
+      actionText="ยืนยันยอด"
+      onAction={onAction}
+      pending={pending}
+    />
+  )
+}
+
+function InvoiceLineRow({ line }: { line: InvoiceLine }) {
+  return (
+    <div className="flex items-start gap-2 border-b px-3 py-2 text-sm last:border-b-0">
+      {line.kind === 'drug' ? (
+        <Pill className="mt-0.5 size-3.5 shrink-0 text-primary-strong" />
+      ) : (
+        <Stethoscope className="mt-0.5 size-3.5 shrink-0 text-primary-strong" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="font-medium">{line.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {line.quantity}
+          {line.unit ? ` ${line.unit}` : ''} × {line.unitPrice}
+          {line.dosage ? ` · ${line.dosage}` : ''}
+        </p>
+      </div>
+      <span className="shrink-0 tabular-nums">{line.amount}</span>
+    </div>
+  )
+}
+
+/**
+ * เนื้อในของใบเสร็จ — **ใช้ร่วมกันทั้งกล่องดูและกล่องยืนยันยอด**
+ *
+ * (ผู้ใช้ขอ 2026-09-15: "ควรมีข้อมูลให้ครบกว่านี้ ควรบอกว่าอะไรเท่าไหร่บ้าง และบอก
+ * ชื่อของผู้ใช้ด้วย") — เดิมมีแค่ยอดสรุปสี่บรรทัด ไม่มีชื่อลูกค้าและไม่มีรายการที่คิดเงิน
+ * เลย ทั้งที่ `invoice.lines` มีอยู่แล้ว แค่ไม่มีใครวาดมัน
+ */
+function InvoiceSummaryContent({ invoice }: { invoice: Invoice }) {
+  return (
+    <div className="flex flex-col gap-3 text-left">
+      {/* ลูกค้า — ชื่อจริงถ้าลงทะเบียนแล้ว ไม่งั้นใช้ชื่อที่กรอกหน้างาน (มาจาก BE) */}
+      <div className="flex items-center gap-2 rounded-md border bg-card p-3 text-sm">
+        <UserRound className="size-4 shrink-0 text-primary-strong" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium text-foreground">
+            {invoice.visit.ownerName ?? 'ไม่ระบุเจ้าของ'}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">
+            {invoice.visit.petName ?? 'ไม่ระบุสัตว์'}
+            {invoice.visit.ownerPhone ? ` · ${invoice.visit.ownerPhone}` : ''} · คิว{' '}
+            {invoice.visit.queueNumber} · {formatDate(invoice.visit.queueDate)}
+          </p>
+        </div>
+      </div>
+
+      {/* รายการที่คิดเงิน — สิ่งที่พนักงานอ่านให้ลูกค้าฟัง */}
+      <div className="overflow-hidden rounded-md border">
+        {invoice.lines.length === 0 ? (
+          <p className="p-3 text-sm text-muted-foreground">ไม่มีรายการ</p>
+        ) : (
+          invoice.lines.map((line, i) => <InvoiceLineRow key={i} line={line} />)
+        )}
+      </div>
+
+      <dl className="flex flex-col gap-1 rounded-md border bg-card p-3 text-sm">
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">ยอดรายการ</dt>
+          <dd className="tabular-nums">{invoice.subtotal}</dd>
+        </div>
+        {Number(invoice.discount) > 0 ? (
+          <div className="flex justify-between text-emerald-700">
+            <dt>ส่วนลด</dt>
+            <dd className="tabular-nums">-{invoice.discount}</dd>
+          </div>
+        ) : null}
+        <div className="flex justify-between font-medium text-foreground">
+          <dt>ยอดที่ต้องจ่าย</dt>
+          <dd className="tabular-nums">{invoice.total}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">รับมาแล้ว</dt>
+          <dd className="tabular-nums">{invoice.paid}</dd>
+        </div>
+      </dl>
+
+      {invoice.rejectReason ? (
+        <div className="rounded-md border border-red-300 bg-red-50 p-2.5 text-sm text-red-900">
+          <span className="font-medium">เหตุผลที่ตีกลับ:</span> {invoice.rejectReason}
+        </div>
+      ) : null}
+
+      <div className="divide-y rounded-md border">
+        {invoice.payments.map((p) => (
+          <div key={p.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5">
+                {PAYMENT_METHOD_LABEL[p.method]}
+                {p.byOwner ? (
+                  <span className="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary-strong">
+                    ลูกค้าแนบเอง
+                  </span>
+                ) : null}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {new Date(p.receivedAt).toLocaleString('th-TH')}
+                {p.reference ? ` · ${p.reference}` : ''}
+              </span>
+            </span>
+
+            {p.hasSlip ? (
+              <a
+                href={slipUrl(p.id)}
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 text-xs text-primary-strong hover:underline"
+              >
+                ดูสลิป
+              </a>
+            ) : null}
+
+            <span className="w-20 text-right tabular-nums">{p.amount}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* เวลาทุกขั้น — ผู้ใช้ขอ 2026-09-08: "ควรขึ้นเวลาบอกทุกอย่าง" */}
+      <dl className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <div className="flex justify-between gap-2">
+          <dt>ออกใบเมื่อ</dt>
+          <dd>{new Date(invoice.createdAt).toLocaleString('th-TH')}</dd>
+        </div>
+        {invoice.submittedAt ? (
+          <div className="flex justify-between gap-2">
+            <dt>ส่งให้บัญชีตรวจเมื่อ</dt>
+            <dd>{new Date(invoice.submittedAt).toLocaleString('th-TH')}</dd>
+          </div>
+        ) : null}
+        {invoice.verifiedAt ? (
+          <div className="flex justify-between gap-2">
+            <dt>ยืนยันยอดเมื่อ</dt>
+            <dd>{new Date(invoice.verifiedAt).toLocaleString('th-TH')}</dd>
+          </div>
+        ) : null}
+      </dl>
+    </div>
+  )
+}
+
+/** กล่องดูรายละเอียด — อ่านอย่างเดียว · โหลดของจริงเองเสมอ (ตัวที่ตารางส่งมาไม่มี `lines`) */
+function InvoiceDetailDialog({
+  invoiceId,
+  open,
+  onOpenChange,
+}: {
+  invoiceId: number | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const { data: invoice, isPending, isError, error } = useInvoice(open ? invoiceId : null)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -354,89 +555,12 @@ function InvoiceDetailDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {invoice ? (
-          <div className="flex flex-col gap-3">
-            <dl className="flex flex-col gap-1 rounded-md border bg-card p-3 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">ยอดรายการ</dt>
-                <dd className="tabular-nums">{invoice.subtotal}</dd>
-              </div>
-              {Number(invoice.discount) > 0 ? (
-                <div className="flex justify-between text-emerald-700">
-                  <dt>ส่วนลด</dt>
-                  <dd className="tabular-nums">-{invoice.discount}</dd>
-                </div>
-              ) : null}
-              <div className="flex justify-between font-medium">
-                <dt>ยอดที่ต้องจ่าย</dt>
-                <dd className="tabular-nums">{invoice.total}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">รับมาแล้ว</dt>
-                <dd className="tabular-nums">{invoice.paid}</dd>
-              </div>
-            </dl>
-
-            {invoice.rejectReason ? (
-              <div className="rounded-md border border-red-300 bg-red-50 p-2.5 text-sm text-red-900">
-                <span className="font-medium">เหตุผลที่ตีกลับ:</span> {invoice.rejectReason}
-              </div>
-            ) : null}
-
-            {/* เวลาทุกขั้น — ผู้ใช้ขอ 2026-09-08: "ควรขึ้นเวลาบอกทุกอย่าง" */}
-            <dl className="flex flex-col gap-1 text-xs text-muted-foreground">
-              <div className="flex justify-between gap-2">
-                <dt>ออกใบเมื่อ</dt>
-                <dd>{new Date(invoice.createdAt).toLocaleString('th-TH')}</dd>
-              </div>
-              {invoice.submittedAt ? (
-                <div className="flex justify-between gap-2">
-                  <dt>ส่งให้บัญชีตรวจเมื่อ</dt>
-                  <dd>{new Date(invoice.submittedAt).toLocaleString('th-TH')}</dd>
-                </div>
-              ) : null}
-              {invoice.verifiedAt ? (
-                <div className="flex justify-between gap-2">
-                  <dt>ยืนยันยอดเมื่อ</dt>
-                  <dd>{new Date(invoice.verifiedAt).toLocaleString('th-TH')}</dd>
-                </div>
-              ) : null}
-            </dl>
-
-            <div className="divide-y rounded-md border">
-              {invoice.payments.map((p) => (
-                <div key={p.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      {PAYMENT_METHOD_LABEL[p.method]}
-                      {p.byOwner ? (
-                        <span className="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary-strong">
-                          ลูกค้าแนบเอง
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {new Date(p.receivedAt).toLocaleString('th-TH')}
-                      {p.reference ? ` · ${p.reference}` : ''}
-                    </span>
-                  </span>
-
-                  {p.hasSlip ? (
-                    <a
-                      href={slipUrl(p.id)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="shrink-0 text-xs text-primary-strong hover:underline"
-                    >
-                      ดูสลิป
-                    </a>
-                  ) : null}
-
-                  <span className="w-20 text-right tabular-nums">{p.amount}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+        {isPending ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">กำลังโหลด…</p>
+        ) : isError ? (
+          <p className="text-sm text-destructive">{toErrorMessage(error)}</p>
+        ) : invoice ? (
+          <InvoiceSummaryContent invoice={invoice} />
         ) : null}
 
         <DialogFooter>

@@ -80,6 +80,17 @@ const toWire = (row: InvoiceWithPayments) => ({
   verifiedAt: row.verifiedAt?.toISOString() ?? null,
   verifiedBy: row.verifiedBy === null ? null : Number(row.verifiedBy),
   rejectReason: row.rejectReason,
+  /**
+   * คิวที่ใบนี้มาจาก — **บัญชีต้องรู้ว่า "ของใคร" ก่อนกดยืนยัน** (ผู้ใช้ขอ 2026-09-15)
+   * ไม่ใช่แค่เลขที่ใบกับยอดเงิน · ชื่อจริงถ้าลงทะเบียนแล้ว ไม่งั้นใช้ชื่อหน้างาน
+   */
+  visit: {
+    queueNumber: row.visit.queueNumber,
+    queueDate: row.visit.queueDate.toISOString().slice(0, 10),
+    ownerName: row.visit.ownerName,
+    ownerPhone: row.visit.ownerPhone,
+    petName: row.visit.petName,
+  },
   /** รายการที่คิดเงิน — ว่างในหน้าลิสต์ (ดู `listInvoices`) */
   lines: row.lines,
   payments: row.payments.map((p) => ({
