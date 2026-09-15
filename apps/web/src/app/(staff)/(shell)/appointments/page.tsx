@@ -36,7 +36,7 @@ import { AppointmentYearView } from './appointment-year-view'
 const SLOTS: AppointmentSlot[] = ['MORNING_1', 'MORNING_2', 'AFTERNOON_1', 'AFTERNOON_2']
 
 type BoardView = 'day' | 'week' | 'month' | 'year'
-const VIEW_LABEL: Record<BoardView, string> = { day: 'วัน', week: 'สัปดาห์', month: 'เดือน', year: 'ปี' }
+const VIEW_LABEL: Record<BoardView, string> = { day: 'วัน', week: 'รายการ', month: 'เดือน', year: 'ปี' }
 
 /**
  * ตารางจองรายวัน — **แบ่งตามช่วงเวลา ไม่ใช่ตารางแถวเดียว**
@@ -143,7 +143,7 @@ function AppointmentBoard() {
             void setDate(d)
             void setView(null)
           }}
-          onChangeWeek={(d) => void setDate(d)}
+          onChangeMonth={(d) => void setDate(d)}
         />
       ) : view === 'month' ? (
         <AppointmentMonthView

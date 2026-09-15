@@ -34,8 +34,8 @@ export function AppointmentMonthView({
   const capacity = data?.capacityPerDay ?? 32
 
   return (
-    <div className="flex h-full flex-col gap-3">
-      <div className="flex items-center justify-center gap-2">
+    <div className="flex flex-1 flex-col gap-3">
+      <div className="flex shrink-0 items-center justify-center gap-2">
         <Button
           type="button"
           variant="ghost"
@@ -59,15 +59,15 @@ export function AppointmentMonthView({
         </Button>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
+      <div className="grid shrink-0 grid-cols-7 gap-1.5 text-center text-xs text-muted-foreground">
         {WEEKDAY_LABEL.map((label) => (
           <span key={label}>{label}</span>
         ))}
       </div>
 
-      <div className="flex flex-1 flex-col gap-1 overflow-y-auto">
+      <div className="grid flex-1 auto-rows-fr gap-1.5">
         {weeks.map((week) => (
-          <div key={week[0]} className="grid grid-cols-7 gap-1">
+          <div key={week[0]} className="grid grid-cols-7 gap-1.5">
             {week.map((day) => {
               const count = countByDay.get(day) ?? 0
               const inMonth = isSameMonth(day, year, month)
@@ -79,16 +79,16 @@ export function AppointmentMonthView({
                   type="button"
                   onClick={() => onSelectDay(day)}
                   className={cn(
-                    'flex flex-col items-center gap-1 rounded-md border p-1.5 transition-colors hover:border-primary hover:bg-primary/5',
+                    'flex h-full flex-col items-center justify-center gap-1.5 rounded-lg border p-2 transition-colors hover:border-primary hover:bg-primary/5',
                     !inMonth && 'opacity-40',
                     isToday && 'border-primary ring-1 ring-primary/40',
                   )}
                 >
-                  <span className="text-xs">{dayOfMonth(day)}</span>
+                  <span className="text-base font-semibold">{dayOfMonth(day)}</span>
                   {count > 0 ? (
                     <span
                       className={cn(
-                        'w-full rounded px-1 py-0.5 text-[11px] font-medium',
+                        'rounded px-2 py-0.5 text-xs font-medium',
                         isPending ? 'bg-muted text-muted-foreground' : fullnessBadgeClassName(count, capacity),
                       )}
                     >

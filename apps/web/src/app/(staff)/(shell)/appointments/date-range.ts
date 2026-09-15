@@ -106,3 +106,24 @@ export function isSameMonth(dateStr: string, year: number, month: number): boole
 export function dayOfMonth(dateStr: string): number {
   return parseISODate(dateStr).getUTCDate()
 }
+
+export type MonthDays = { from: string; to: string; year: number; month: number; days: string[] }
+
+/** วันจริงของเดือนล้วน ๆ ไม่ปนวันเดือนอื่นที่เติมมาเต็มตาราง (ต่างจาก `monthGridOf`) */
+export function daysInMonthOf(dateStr: string): MonthDays {
+  const d = parseISODate(dateStr)
+  const year = d.getUTCFullYear()
+  const month = d.getUTCMonth()
+
+  const from = formatISODate(new Date(Date.UTC(year, month, 1)))
+  const daysCount = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+  const days = Array.from({ length: daysCount }, (_, i) => addDays(from, i))
+
+  return { from, to: days[days.length - 1] as string, year, month, days }
+}
+
+/** จันทร์=0 .. อาทิตย์=6 — เรียงเดียวกับ `WEEKDAY_LABEL` ที่ใช้ทั่วมุมมองพวกนี้ */
+export function weekdayIndexOf(dateStr: string): number {
+  const dow = parseISODate(dateStr).getUTCDay() // 0=อา..6=ส
+  return dow === 0 ? 6 : dow - 1
+}
