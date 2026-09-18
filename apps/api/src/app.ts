@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia'
 import { cors } from '@elysiajs/cors'
+import { checkRateLimit, clientIpOf } from './kit/rate-limit.ts'
 import { toErrorResponse, validationFailed } from './kit/response.ts'
 import { authRoutes } from './modules/auth/auth.routes.ts'
 import { ownerAuthRoutes } from './modules/owner-auth/owner-auth.routes.ts'
@@ -44,6 +45,14 @@ const allowedOrigins = (process.env['WEB_ORIGIN'] ?? 'http://localhost:3200,http
   .map((s) => s.trim())
   .filter(Boolean)
 
+/**
+ * เพดานกลาง กันการยิงถี่พื้นฐาน (basic DoS) — ต่อ IP หนึ่งตัว
+ *
+ * เส้นที่มีความเสี่ยงสูงกว่านี้ (เช่น login) มีเพดานที่เข้มกว่านี้ของตัวเองซ้อนอยู่อีกชั้น
+ * ดู `checkRateLimit` ที่ `auth.routes.ts`
+ */
+const GLOBAL_RATE_LIMIT = { limit: 120, windowMs: 60_000 }
+
 export const app = new Elysia()
   .use(
     cors({
@@ -54,6 +63,14 @@ export const app = new Elysia()
       allowedHeaders: ['content-type'],
     }),
   )
+
+  // เฉพาะ `/api/*` — `/health` เป็นของที่ Railway ยิงตรวจสถานะถี่ ๆ ไม่ควรไปนับรวม
+  .onRequest(({ request }) => {
+    const { pathname } = new URL(request.url)
+    if (!pathname.startsWith('/api')) return
+
+    checkRateLimit(`global:${clientIpOf(request)}`, GLOBAL_RATE_LIMIT)
+  })
 
   /**
    * ทางออกเดียวของ error ทั้งระบบ

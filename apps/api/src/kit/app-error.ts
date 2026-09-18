@@ -20,6 +20,8 @@ export const ERROR_CODE = {
   FORBIDDEN: 'FORBIDDEN',
   /** Not signed in, or the session is gone. */
   UNAUTHORIZED: 'UNAUTHORIZED',
+  /** Called too many times too fast — see `kit/rate-limit.ts`. */
+  TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
 } as const
 
 export type ErrorCode = (typeof ERROR_CODE)[keyof typeof ERROR_CODE]
@@ -32,6 +34,7 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   IN_USE: 409,
   FORBIDDEN: 403,
   UNAUTHORIZED: 401,
+  TOO_MANY_REQUESTS: 429,
 }
 
 export class AppError extends Error {
@@ -68,5 +71,8 @@ export const forbidden = (message: string, detail?: Record<string, unknown>) =>
 
 export const unauthorized = (message: string, detail?: Record<string, unknown>) =>
   new AppError(ERROR_CODE.UNAUTHORIZED, message, detail)
+
+export const tooManyRequests = (message: string, detail?: Record<string, unknown>) =>
+  new AppError(ERROR_CODE.TOO_MANY_REQUESTS, message, detail)
 
 export const isAppError = (e: unknown): e is AppError => e instanceof AppError

@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia'
 import { ok } from '../../kit/response.ts'
 import { SESSION_COOKIE, getActorAllowingPasswordChange, tokenFrom } from '../../kit/actor.ts'
+import { checkRateLimit, clientIpOf } from '../../kit/rate-limit.ts'
 import { refuseUnknownFields } from '../../kit/route-guard.ts'
 import { changePassword, login, logout, me } from './auth.service.ts'
 
@@ -27,6 +28,14 @@ const COOKIE_BASE = {
 } as const
 
 const SESSION_HOURS = 10
+
+/**
+ * เข้มกว่าเพดานกลางของทั้งระบบ (`GLOBAL_RATE_LIMIT` ที่ `app.ts`) เพราะ login คือเส้นที่
+ * โดนบรูทฟอร์ซ — ซ้อนอยู่กับการล็อกบัญชีหลังพิมพ์ผิด 5 ครั้ง (`LOGIN_ATTEMPT_LIMIT` ที่
+ * `auth.service.ts`) แต่คนละกลไก: ตัวนั้นนับต่อบัญชี ตัวนี้นับต่อ IP — กันกรณีไล่เดา
+ * รหัสข้ามหลายชื่อผู้ใช้จากเครื่องเดียว ซึ่งการล็อกต่อบัญชีเพียงอย่างเดียวกันไม่ได้
+ */
+const LOGIN_RATE_LIMIT = { limit: 10, windowMs: 5 * 60_000 }
 
 const LOGIN_FIELDS = new Set(['username', 'password'])
 const CHANGE_PASSWORD_FIELDS = new Set(['newPassword'])
@@ -65,6 +74,9 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
   .post(
     '/login',
     async ({ body, request, cookie }) => {
+      // ตรวจก่อนแตะฐาน/hash เลย — โดนบล็อกแล้วไม่ต้องเสียงานฝั่งเซิร์ฟเวอร์เพิ่ม
+      checkRateLimit(`login:${clientIpOf(request)}`, LOGIN_RATE_LIMIT)
+
       const user = await login({
         username: body.username,
         password: body.password,
