@@ -15,11 +15,13 @@ import { writeAudit } from '../../kit/audit.ts'
 const SESSION_HOURS = 10
 
 /**
- * รหัสผิดกี่ครั้งถึงล็อก
+ * รหัสผิดกี่ครั้งถึงล็อก — **นับเฉพาะที่เกิดในหน้าต่าง `LOGIN_ATTEMPT_WINDOW_MS` ล่าสุด**
+ * ไม่ใช่สะสมตลอดไป (ผู้ใช้ตัดสิน 2026-09-18: "ใน 1 นาที ถ้า 3 ครั้งไม่ถูกต้อง")
  *
  * ล็อกแล้ว **ไม่ปลดเอง** ต้องมีผู้ดูแลมาปลด — ดู `///` บน `user.lockedAt` ในสคีมา
  */
-const LOGIN_ATTEMPT_LIMIT = 5
+const LOGIN_ATTEMPT_LIMIT = 3
+const LOGIN_ATTEMPT_WINDOW_MS = 60_000
 
 /** 32 ไบต์สุ่ม = เดาไม่ได้ในทางปฏิบัติ */
 const TOKEN_BYTES = 32
@@ -93,7 +95,14 @@ async function recordAttempt(input: {
 }
 
 /**
- * นับรหัสผิดหนึ่งครั้ง และล็อกเมื่อครบ
+ * นับรหัสผิดในหน้าต่างเวลาล่าสุด และล็อกเมื่อครบ
+ *
+ * **นับจาก `login_log` จริง ไม่ใช่ตัวนับสะสม** — ต้องรู้ว่ามีกี่ครั้งที่ผิด **ในนาทีที่
+ * ผ่านมา** ไม่ใช่ตั้งแต่ล็อกอินสำเร็จครั้งก่อน ตัวนับที่ไม่มีเวลากำกับตอบคำถามนั้นไม่ได้
+ * (ต่อให้พิมพ์ผิดครั้งเดียวเมื่อสามชั่วโมงก่อนก็จะนับรวมกับที่พิมพ์ผิดตอนนี้)
+ *
+ * **เรียกก่อน `recordAttempt` ของครั้งนี้เสมอ** — คิวรี่นี้จึงเห็นแค่ความผิดพลาด
+ * "ก่อนหน้า" ไม่รวมครั้งนี้ ต้อง `+1` เอาครั้งนี้เข้าไปด้วยตอนเทียบกับเพดาน
  *
  * **อยู่นอกทรานแซกชันของ `login`** เพราะ `login` โยน error ทิ้ง ซึ่งจะ rollback
  * การนับไปด้วย แล้วตัวนับจะไม่ขยับเลยตลอดกาล
@@ -101,11 +110,16 @@ async function recordAttempt(input: {
 async function countFailure(userId: bigint): Promise<void> {
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { failedAttempts: true, lockCount: true },
+    select: { lockCount: true },
   })
   if (!user) return
 
-  const next = user.failedAttempts + 1
+  const windowStart = new Date(Date.now() - LOGIN_ATTEMPT_WINDOW_MS)
+  const recentFailures = await db.loginLog.count({
+    where: { userId, result: 'FAILED_PASSWORD', createdAt: { gte: windowStart } },
+  })
+
+  const next = recentFailures + 1
   const shouldLock = next >= LOGIN_ATTEMPT_LIMIT
 
   await db.user.update({

@@ -149,7 +149,8 @@ model User {
   /// ด่านอยู่ที่ `getActor` ใน `kit/actor.ts` ไม่ได้ฝากไว้กับหน้าจอ
   mustChangePassword Boolean @default(true) @map("must_change_password")
 
-  /// นับรหัสผิดติดกัน — **รีเซ็ตเป็น 0 ทุกครั้งที่ล็อกอินสำเร็จ**
+  /// จำนวนรหัสผิดในหน้าต่าง 1 นาทีล่าสุด (คำนวณจาก `login_log` ตอนล็อกอิน ไม่ใช่ตัวนับ
+  /// สะสมตลอดไป) — **รีเซ็ตเป็น 0 ทุกครั้งที่ล็อกอินสำเร็จ** ด้วย
   failedAttempts Int @default(0) @map("failed_attempts")
 
   /// ถูกล็อกเพราะรหัสผิดครบจำนวน
