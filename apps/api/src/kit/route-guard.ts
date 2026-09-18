@@ -1,6 +1,7 @@
 import { getActor, requirePermission, type ActorContext } from './actor.ts'
 import { invalid } from './app-error.ts'
 import {
+  AUDIT_LOG_PERMISSION,
   BILLING_PERMISSION,
   DRUG_STOCK_PERMISSION,
   DRUG_WAREHOUSE_PERMISSION,
@@ -94,6 +95,9 @@ export const guardDrugWarehouseRead = silent((ctx) =>
 export const guardDrugWarehouseWrite = silent((ctx) =>
   requirePermission(ctx, DRUG_WAREHOUSE_PERMISSION.write),
 )
+
+/** ประวัติการใช้งาน (audit log) — อ่านอย่างเดียว ดู `///` บน `AUDIT_LOG_PERMISSION` */
+export const guardAuditLogRead = silent((ctx) => requirePermission(ctx, AUDIT_LOG_PERMISSION.read))
 
 
 /**
@@ -201,6 +205,7 @@ export function guardBody(
  */
 export { getActor }
 export {
+  AUDIT_LOG_PERMISSION,
   BILLING_PERMISSION,
   DRUG_STOCK_PERMISSION,
   DRUG_WAREHOUSE_PERMISSION,

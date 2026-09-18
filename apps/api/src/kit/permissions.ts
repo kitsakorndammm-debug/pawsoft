@@ -146,6 +146,17 @@ export const DRUG_WAREHOUSE_PERMISSION = {
   write: 'main:drug-warehouse:write',
 } as const
 
+/**
+ * สิทธิ์ของ**ประวัติการใช้งาน (audit log)** — อ่านอย่างเดียว ไม่มี `write` เพราะไม่มีใคร
+ * เขียนบันทึกนี้ผ่านหน้าจอ (โมดูลอื่นเขียนให้เองผ่าน `writeAudit()` ตอนเปลี่ยนข้อมูล)
+ *
+ * เนื้อในเป็นข้อมูลที่ละเอียดอ่อน (ใครแก้อะไรของใคร) แยกจาก `master` เพื่อให้ grant
+ * ได้เฉพาะคนที่ควรตรวจสอบระบบจริง ๆ ไม่ผูกกับสิทธิ์แก้ทะเบียนทั่วไป
+ */
+export const AUDIT_LOG_PERMISSION = {
+  read: 'main:audit-log:read',
+} as const
+
 /** ทุก key ที่มีอยู่ตอนนี้ */
 export const PERMISSIONS: readonly PermissionDef[] = [
   {
@@ -231,6 +242,12 @@ export const PERMISSIONS: readonly PermissionDef[] = [
     label: 'บันทึกซื้อเข้า/ปรับยอด/เบิกจากคลังยา',
     groupCode: 'drug-warehouse',
     groupName: 'คลังยา',
+  },
+  {
+    key: AUDIT_LOG_PERMISSION.read,
+    label: 'ดูประวัติการใช้งาน',
+    groupCode: 'audit-log',
+    groupName: 'ประวัติการใช้งาน',
   },
 ]
 

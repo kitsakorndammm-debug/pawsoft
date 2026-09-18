@@ -4,6 +4,7 @@ import {
   Boxes,
   Briefcase,
   Building2,
+  History,
   IdCard,
   Menu,
   Pill,
@@ -19,8 +20,15 @@ import { useState } from 'react'
 
 import { SearchInput } from '@/components/common/search-input'
 import { useCan, useCanAny } from '@/features/auth/hooks'
-import { DRUG_STOCK_READ, DRUG_WAREHOUSE_READ, HR_READ, MASTER_READ } from '@/lib/permissions'
 import {
+  AUDIT_LOG_READ,
+  DRUG_STOCK_READ,
+  DRUG_WAREHOUSE_READ,
+  HR_READ,
+  MASTER_READ,
+} from '@/lib/permissions'
+import {
+  ROUTE_AUDIT_LOG,
   ROUTE_DEPARTMENTS,
   ROUTE_EMPLOYEES,
   ROUTE_POSITIONS,
@@ -89,6 +97,12 @@ const SETTINGS_GROUPS: SiderGroup[] = [
       },
       { label: 'สต็อกยา', icon: Boxes, href: ROUTE_DRUG_STOCK, permission: DRUG_STOCK_READ },
       { label: 'รายการรักษา', icon: Stethoscope, href: ROUTE_SERVICE_ITEMS, permission: MASTER_READ },
+    ],
+  },
+  {
+    label: 'ระบบ',
+    items: [
+      { label: 'ประวัติการใช้งาน', icon: History, href: ROUTE_AUDIT_LOG, permission: AUDIT_LOG_READ },
     ],
   },
 ]

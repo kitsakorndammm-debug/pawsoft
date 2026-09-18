@@ -2,6 +2,7 @@ import { Elysia } from 'elysia'
 import { cors } from '@elysiajs/cors'
 import { checkRateLimit, clientIpOf } from './kit/rate-limit.ts'
 import { toErrorResponse, validationFailed } from './kit/response.ts'
+import { auditLogRoutes } from './modules/audit-log/audit-log.routes.ts'
 import { authRoutes } from './modules/auth/auth.routes.ts'
 import { ownerAuthRoutes } from './modules/owner-auth/owner-auth.routes.ts'
 import { userRoutes } from './modules/user/user.routes.ts'
@@ -113,6 +114,7 @@ export const app = new Elysia()
   .use(warehouseStockRoutes)
   .use(serviceCategoryRoutes)
   .use(serviceItemRoutes)
+  .use(auditLogRoutes)
 
   // หน้างาน — ลูกค้า สัตว์ การจอง และคิว
   .use(ownerRoutes)

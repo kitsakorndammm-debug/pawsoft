@@ -46,3 +46,6 @@ export const DRUG_STOCK_WRITE = 'main:drug-stock:write'
 
 export const DRUG_WAREHOUSE_READ = 'main:drug-warehouse:read'
 export const DRUG_WAREHOUSE_WRITE = 'main:drug-warehouse:write'
+
+/** ประวัติการใช้งาน (audit log) — อ่านอย่างเดียว ไม่มีใครเขียนผ่านหน้าจอ */
+export const AUDIT_LOG_READ = 'main:audit-log:read'
