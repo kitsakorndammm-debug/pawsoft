@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select'
 import { AUDIT_LOG_PAGE_SIZE, useAuditLogModules, useAuditLogs } from '@/features/audit-log/hooks'
 import type { AuditLogRow } from '@/features/audit-log/api'
+import { formatFieldValue, labelForAction, labelForField, labelForModule } from '@/features/audit-log/labels'
 import { toErrorMessage } from '@/lib/api-client'
 
 /**
@@ -63,8 +64,18 @@ function AuditLogBoard() {
         </span>
       ),
     },
-    { key: 'module', title: 'โมดูล', width: 140, dataIndex: 'module' },
-    { key: 'action', title: 'การกระทำ', truncate: true, dataIndex: 'action' },
+    {
+      key: 'module',
+      title: 'โมดูล',
+      width: 140,
+      render: (row) => labelForModule(row.module),
+    },
+    {
+      key: 'action',
+      title: 'การกระทำ',
+      truncate: true,
+      render: (row) => labelForAction(row.module, row.action),
+    },
     {
       key: 'recordId',
       title: 'แถวที่',
@@ -108,7 +119,7 @@ function AuditLogBoard() {
               <SelectItem value="ALL">ทุกโมดูล</SelectItem>
               {(modules.data ?? []).map((m) => (
                 <SelectItem key={m} value={m}>
-                  {m}
+                  {labelForModule(m)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -156,16 +167,66 @@ function AuditLogBoard() {
   )
 }
 
-/** แสดง `before`/`after` เป็น JSON จัดรูปแบบ — ข้อมูลจริงต่างกันไปทุกโมดูล จึงไม่มีคอลัมน์ตายตัวให้วาด */
-function JsonBlock({ label, value }: { label: string; value: unknown }) {
-  if (value === null || value === undefined) return null
+type DiffRow = { key: string; before: unknown; after: unknown; hasBefore: boolean; hasAfter: boolean }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * เทียบ `before`/`after` เป็นรายฟิลด์ — **แถวเดียวต่อฟิลด์ที่เปลี่ยน** ไม่ใช่ JSON ดิบ
+ * สองก้อน (ผู้ใช้ตัดสิน 2026-09-20 หลังเห็นว่า JSON ดิบอ่านยากเกินไปสำหรับพนักงานทั่วไป)
+ *
+ * `create` มีแต่ `after` → ทุกฟิลด์โชว์เป็น "ค่าเริ่มต้น" · `delete` มีแต่ `before` →
+ * โชว์เป็น "ค่าก่อนลบ" · `update` มีทั้งคู่ (มาจาก `diffFields()` ฝั่ง service ซึ่งส่งมา
+ * เฉพาะฟิลด์ที่เปลี่ยนจริงอยู่แล้ว) → โชว์เป็นลูกศรก่อน→หลัง
+ */
+function diffRows(before: unknown, after: unknown): DiffRow[] {
+  const b = isRecord(before) ? before : {}
+  const a = isRecord(after) ? after : {}
+  const keys = Array.from(new Set([...Object.keys(b), ...Object.keys(a)]))
+
+  return keys.map((key) => ({
+    key,
+    before: b[key],
+    after: a[key],
+    hasBefore: key in b,
+    hasAfter: key in a,
+  }))
+}
+
+function AuditDiff({ module, before, after }: { module: string; before: unknown; after: unknown }) {
+  const rows = diffRows(before, after)
+
+  if (rows.length === 0) {
+    return <p className="text-xs text-muted-foreground">ไม่มีรายละเอียดเพิ่มเติม</p>
+  }
 
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <pre className="max-h-48 overflow-auto rounded-md border bg-muted/40 p-2 text-xs whitespace-pre-wrap">
-        {JSON.stringify(value, null, 2)}
-      </pre>
+    <div className="overflow-hidden rounded-md border">
+      {rows.map((row) => (
+        <div
+          key={row.key}
+          className="flex items-start justify-between gap-3 border-b bg-card px-3 py-2 text-sm last:border-b-0"
+        >
+          <span className="shrink-0 text-muted-foreground">{labelForField(row.key)}</span>
+          <span className="min-w-0 text-right">
+            {row.hasBefore && row.hasAfter ? (
+              <>
+                <span className="text-muted-foreground line-through decoration-muted-foreground/50">
+                  {formatFieldValue(module, row.key, row.before)}
+                </span>{' '}
+                <span aria-hidden>→</span>{' '}
+                <span className="font-medium">{formatFieldValue(module, row.key, row.after)}</span>
+              </>
+            ) : row.hasAfter ? (
+              <span className="font-medium">{formatFieldValue(module, row.key, row.after)}</span>
+            ) : (
+              <span className="text-muted-foreground">{formatFieldValue(module, row.key, row.before)}</span>
+            )}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -185,7 +246,7 @@ function AuditLogDetailDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <History className="size-5 text-primary-strong" />
-            {row?.action}
+            {row ? labelForAction(row.module, row.action) : ''}
           </DialogTitle>
         </DialogHeader>
 
@@ -202,7 +263,7 @@ function AuditLogDetailDialog({
               </div>
               <div className="flex justify-between gap-2">
                 <dt className="text-muted-foreground">โมดูล</dt>
-                <dd>{row.module}</dd>
+                <dd>{labelForModule(row.module)}</dd>
               </div>
               <div className="flex justify-between gap-2">
                 <dt className="text-muted-foreground">แถวที่</dt>
@@ -214,8 +275,26 @@ function AuditLogDetailDialog({
               </div>
             </dl>
 
-            <JsonBlock label="ก่อนแก้ไข" value={row.before} />
-            <JsonBlock label="หลังแก้ไข" value={row.after} />
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground">
+                {row.before === null || row.before === undefined
+                  ? 'ค่าที่ตั้งไว้ตอนสร้าง'
+                  : row.after === null || row.after === undefined
+                    ? 'ค่าก่อนลบ'
+                    : 'สิ่งที่เปลี่ยน'}
+              </span>
+              <AuditDiff module={row.module} before={row.before} after={row.after} />
+            </div>
+
+            {/* ทางออกสำรอง — เผื่อพจนานุกรมคำแปลยังไม่ครอบคลุมทุกฟิลด์ ข้อมูลดิบยังดูได้เสมอ */}
+            <details className="text-xs text-muted-foreground">
+              <summary className="cursor-pointer select-none hover:text-foreground">
+                ดูข้อมูลดิบ (JSON)
+              </summary>
+              <pre className="mt-1 max-h-40 overflow-auto rounded-md border bg-muted/40 p-2 whitespace-pre-wrap">
+                {JSON.stringify({ before: row.before, after: row.after }, null, 2)}
+              </pre>
+            </details>
           </div>
         ) : null}
 
