@@ -1,6 +1,7 @@
 'use client'
 
-import { Pill, Stethoscope, UserRound, Wallet } from 'lucide-react'
+import { ArrowLeft, Pill, Stethoscope, UserRound, Wallet } from 'lucide-react'
+import Link from 'next/link'
 import { useQueryState } from 'nuqs'
 import { Suspense, useState } from 'react'
 
@@ -26,6 +27,7 @@ import {
 import { HISTORY_PAGE_SIZE, usePaymentHistory, usePaymentHistoryDetail } from '@/features/history/hooks'
 import { toErrorMessage } from '@/lib/api-client'
 import { formatDate } from '@/lib/format'
+import { ROUTE_HISTORY } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
 /**
@@ -109,6 +111,17 @@ function PaymentHistoryBoard() {
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="กลับไปหน้าประวัติ"
+          title="กลับไปหน้าประวัติ"
+          nativeButton={false}
+          render={<Link href={ROUTE_HISTORY} />}
+        >
+          <ArrowLeft className="size-4" />
+        </Button>
         <h1 className="flex items-center gap-2 text-lg font-semibold">
           <Wallet className="size-5 text-primary-strong" />
           ประวัติการเงิน

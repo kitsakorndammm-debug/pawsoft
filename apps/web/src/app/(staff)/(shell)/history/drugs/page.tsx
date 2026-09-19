@@ -1,13 +1,16 @@
 'use client'
 
-import { Pill } from 'lucide-react'
+import { ArrowLeft, Pill } from 'lucide-react'
+import Link from 'next/link'
 import { useQueryState } from 'nuqs'
 import { Suspense } from 'react'
 
 import { DataTable, type DataTableColumn } from '@/components/common/data-table'
+import { Button } from '@/components/ui/button'
 import { DRUG_MOVEMENT_TYPE_LABEL, type DrugHistoryRow } from '@/features/history/api'
 import { HISTORY_PAGE_SIZE, useDrugHistory } from '@/features/history/hooks'
 import { toErrorMessage } from '@/lib/api-client'
+import { ROUTE_HISTORY } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
 /**
@@ -95,10 +98,23 @@ function DrugHistoryBoard() {
 
   return (
     <div className="flex h-full flex-col gap-3">
-      <h1 className="flex items-center gap-2 text-lg font-semibold">
-        <Pill className="size-5 text-primary-strong" />
-        ประวัติยา
-      </h1>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="กลับไปหน้าประวัติ"
+          title="กลับไปหน้าประวัติ"
+          nativeButton={false}
+          render={<Link href={ROUTE_HISTORY} />}
+        >
+          <ArrowLeft className="size-4" />
+        </Button>
+        <h1 className="flex items-center gap-2 text-lg font-semibold">
+          <Pill className="size-5 text-primary-strong" />
+          ประวัติยา
+        </h1>
+      </div>
 
       <DataTable<DrugHistoryRow>
         className="min-h-0 flex-1"

@@ -1,14 +1,18 @@
 'use client'
 
-import { CalendarDays, Pill, Stethoscope, UserRound } from 'lucide-react'
+import { ArrowLeft, CalendarDays, Pill, Stethoscope, UserRound } from 'lucide-react'
+import Link from 'next/link'
 import { useState } from 'react'
 
+import { AppDatePicker } from '@/components/common/app-date-picker'
 import { SearchInput } from '@/components/common/search-input'
+import { Button } from '@/components/ui/button'
 import { TRIAGE_LABEL, TRIAGE_STYLE, VISIT_STATUS_LABEL } from '@/features/visit/api'
 import { useVisitBillHistory, useVisitHistory } from '@/features/history/hooks'
 import { useOwnerSearch } from '@/features/owner/hooks'
 import { usePetOptions } from '@/features/pet/hooks'
 import { toErrorMessage } from '@/lib/api-client'
+import { ROUTE_HISTORY } from '@/lib/routes'
 import { useDebounce } from '@/lib/use-debounce'
 import { cn } from '@/lib/utils'
 
@@ -169,24 +173,33 @@ function VisitBillDetail({ visitId }: { visitId: number }) {
   )
 }
 
-function VisitList({ petId }: { petId: number }) {
+/**
+ * `petId` กับ `date` เลือกอย่างใดอย่างหนึ่ง — `petId` = ประวัติสัตว์ตัวเดียวทุกวัน ·
+ * `date` = ทุกคิววันนั้นข้ามผู้ป่วย (ผู้ใช้ขอ 2026-09-20: "อยากดูว่ามีการรักษาอะไรบ้าง
+ * ในเดือนนี้ เหมือนหน้าประวัติการเงิน") — โหมดหลังต้องโชว์ชื่อผู้ป่วยในแถว เพราะแต่ละ
+ * แถวเป็นคนละตัวกัน ไม่เหมือนโหมด `petId` ที่รู้อยู่แล้วว่าเป็นสัตว์ตัวไหน
+ */
+function VisitList({ petId, date }: { petId: number | null; date: string | null }) {
   const [expanded, setExpanded] = useState<number | null>(null)
-  const { data, isPending, isError, error } = useVisitHistory(petId, 1)
+  const { data, isPending, isError, error } = useVisitHistory(petId, date, 1)
   const rows = data?.rows ?? []
+  const showPatient = petId === null
 
   if (isPending) return <p className="text-sm text-muted-foreground">กำลังโหลด…</p>
   if (isError) return <p className="text-sm text-destructive">{toErrorMessage(error)}</p>
   if (rows.length === 0) {
     return (
       <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
-        ยังไม่เคยมาคลินิก
+        {showPatient ? 'วันนี้ไม่มีคิว' : 'ยังไม่เคยมาคลินิก'}
       </p>
     )
   }
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs text-muted-foreground">มาแล้ว {data?.page.total ?? 0} ครั้ง</p>
+      <p className="text-xs text-muted-foreground">
+        {showPatient ? `ทั้งหมด ${data?.page.total ?? 0} คิว` : `มาแล้ว ${data?.page.total ?? 0} ครั้ง`}
+      </p>
 
       {rows.map((v) => (
         <div key={v.id} className="rounded-lg border bg-card">
@@ -209,6 +222,11 @@ function VisitList({ petId }: { petId: number }) {
                   </span>
                 ) : null}
               </span>
+              {showPatient ? (
+                <span className="block truncate text-xs text-foreground">
+                  {v.petName ?? 'ไม่ระบุสัตว์'} · {v.ownerName ?? 'ไม่ระบุเจ้าของ'}
+                </span>
+              ) : null}
               <span className="block truncate text-xs text-muted-foreground">
                 {v.diagnosis ?? v.symptom ?? 'ไม่มีบันทึก'}
               </span>
@@ -229,32 +247,70 @@ function VisitList({ petId }: { petId: number }) {
 export default function TreatmentHistoryPage() {
   const [owner, setOwner] = useState<{ id: number; name: string } | null>(null)
   const [petId, setPetId] = useState<number | null>(null)
+  /**
+   * เลือกวันที่ = สลับไปโหมด "ทุกคิววันนั้น" แทนการค้นทีละเจ้าของ/สัตว์ (ผู้ใช้ขอ
+   * 2026-09-20) — สองโหมดตอบคนละคำถาม จึงไม่ปนกัน: มีวันที่ค้างอยู่ ซ่อนตัวค้นหาเจ้าของ
+   */
+  const [date, setDate] = useState<string | null>(null)
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <h1 className="flex items-center gap-2 text-lg font-semibold">
-        <Stethoscope className="size-5 text-primary-strong" />
-        ประวัติการรักษา
-      </h1>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="กลับไปหน้าประวัติ"
+          title="กลับไปหน้าประวัติ"
+          nativeButton={false}
+          render={<Link href={ROUTE_HISTORY} />}
+        >
+          <ArrowLeft className="size-4" />
+        </Button>
+        <h1 className="flex items-center gap-2 text-lg font-semibold">
+          <Stethoscope className="size-5 text-primary-strong" />
+          ประวัติการรักษา
+        </h1>
 
-      <OwnerPicker
-        ownerId={owner?.id ?? null}
-        onSelect={(id, name) => {
-          setOwner({ id, name })
-          setPetId(null)
-        }}
-      />
-
-      {owner ? (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm text-muted-foreground">
-            สัตว์เลี้ยงของ <span className="font-medium text-foreground">{owner.name}</span>
-          </p>
-          <PetPicker ownerId={owner.id} petId={petId} onSelect={setPetId} />
+        <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
+          <AppDatePicker
+            value={date ?? ''}
+            onChange={(v) => setDate(v ?? null)}
+            className="w-40"
+            aria-label="ดูประวัติการรักษาของวันที่"
+          />
+          {date ? (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setDate(null)}>
+              ทุกวัน
+            </Button>
+          ) : null}
         </div>
-      ) : null}
+      </div>
 
-      {petId !== null ? <VisitList petId={petId} /> : null}
+      {date !== null ? (
+        <VisitList petId={null} date={date} />
+      ) : (
+        <>
+          <OwnerPicker
+            ownerId={owner?.id ?? null}
+            onSelect={(id, name) => {
+              setOwner({ id, name })
+              setPetId(null)
+            }}
+          />
+
+          {owner ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-muted-foreground">
+                สัตว์เลี้ยงของ <span className="font-medium text-foreground">{owner.name}</span>
+              </p>
+              <PetPicker ownerId={owner.id} petId={petId} onSelect={setPetId} />
+            </div>
+          ) : null}
+
+          {petId !== null ? <VisitList petId={petId} date={null} /> : null}
+        </>
+      )}
     </div>
   )
 }

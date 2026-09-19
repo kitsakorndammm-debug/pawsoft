@@ -51,6 +51,9 @@ export type VisitHistoryRow = {
   status: 'WAITING' | 'IN_PROGRESS' | 'AWAITING_PAYMENT' | 'DONE' | 'LEFT' | 'CANCELLED'
   ownerId: number | null
   petId: number | null
+  /** ชื่อจริงถ้าเป็นสัตว์/เจ้าของที่ลงทะเบียนในระบบ ไม่งั้น fallback ไปชื่อ walk-in */
+  petName: string | null
+  ownerName: string | null
   walkInPetName: string | null
   walkInOwnerName: string | null
   symptom: string | null
@@ -103,12 +106,13 @@ export const historyApi = {
 
   payment: (id: number) => api.get<Invoice>(`/api/history/payments/${id}`),
 
-  visits: (input: { petId: number | null; page: number; pageSize: number }) => {
+  visits: (input: { petId: number | null; date: string | null; page: number; pageSize: number }) => {
     const search = new URLSearchParams({
       page: String(input.page),
       pageSize: String(input.pageSize),
     })
     if (input.petId !== null) search.set('petId', String(input.petId))
+    if (input.date !== null) search.set('date', input.date)
     return api.getPaged<VisitHistoryRow>(`/api/history/visits?${search.toString()}`)
   },
 

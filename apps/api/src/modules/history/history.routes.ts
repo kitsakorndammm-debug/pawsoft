@@ -2,12 +2,10 @@ import { Elysia, t } from 'elysia'
 import { invalid } from '../../kit/app-error.ts'
 import { getInvoiceDetail, listInvoices } from '../payment/payment.service.ts'
 import { getVisitBill } from '../visit/visit-item.service.ts'
-import { listVisits } from '../visit/visit.service.ts'
 import { ok, paged } from '../../kit/response.ts'
 import { guardSignedIn, parseId, parseIdFilter, refuseUnknownQuery } from '../../kit/route-guard.ts'
-import { listDrugHistory, type DrugHistoryRow } from './history.service.ts'
+import { listDrugHistory, listVisitHistory, type DrugHistoryRow, type VisitHistoryRow } from './history.service.ts'
 import type { InvoiceWithPayments } from '../payment/payment.service.ts'
-import type { Visit } from '../../../prisma/generated/client.ts'
 import type { VisitStatus } from '../../../prisma/generated/client.ts'
 
 /**
@@ -95,7 +93,7 @@ const PAYMENT_LIST_QUERY_KEYS = new Set(['status', 'date', 'page', 'pageSize'])
 const toDate = (d: Date) => d.toISOString().slice(0, 10)
 const num = (v: bigint | null) => (v === null ? null : Number(v))
 
-const visitToWire = (row: Visit) => ({
+const visitToWire = (row: VisitHistoryRow) => ({
   id: Number(row.id),
   queueNumber: row.queueNumber,
   queueDate: toDate(row.queueDate),
@@ -103,6 +101,8 @@ const visitToWire = (row: Visit) => ({
   status: row.status,
   ownerId: num(row.ownerId),
   petId: num(row.petId),
+  petName: row.petName,
+  ownerName: row.ownerName,
   walkInPetName: row.walkInPetName,
   walkInOwnerName: row.walkInOwnerName,
   symptom: row.symptom,
@@ -114,7 +114,7 @@ const visitToWire = (row: Visit) => ({
   note: row.note,
 })
 
-const VISIT_LIST_QUERY_KEYS = new Set(['petId', 'ownerId', 'status', 'page', 'pageSize'])
+const VISIT_LIST_QUERY_KEYS = new Set(['petId', 'ownerId', 'status', 'date', 'page', 'pageSize'])
 
 export const historyRoutes = new Elysia({ prefix: '/api/history' })
   .get(
@@ -184,10 +184,11 @@ export const historyRoutes = new Elysia({ prefix: '/api/history' })
     async ({ query, request }) => {
       refuseUnknownQuery(request.url, VISIT_LIST_QUERY_KEYS)
 
-      const result = await listVisits({
+      const result = await listVisitHistory({
         petId: parseIdFilter(query.petId, 'petId'),
         ownerId: parseIdFilter(query.ownerId, 'ownerId'),
         status: query.status as VisitStatus | undefined,
+        date: query.date,
         page: parseCount(query.page, 'page'),
         pageSize: parseCount(query.pageSize, 'pageSize'),
       })
@@ -204,6 +205,7 @@ export const historyRoutes = new Elysia({ prefix: '/api/history' })
         petId: t.Optional(t.String()),
         ownerId: t.Optional(t.String()),
         status: t.Optional(t.String()),
+        date: t.Optional(t.String()),
         page: t.Optional(t.String()),
         pageSize: t.Optional(t.String()),
       }),

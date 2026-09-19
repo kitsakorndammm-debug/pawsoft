@@ -32,11 +32,11 @@ export function usePaymentHistoryDetail(id: number | null) {
   })
 }
 
-export function useVisitHistory(petId: number | null, page: number) {
+export function useVisitHistory(petId: number | null, date: string | null, page: number) {
   return useQuery({
-    queryKey: [...HISTORY_ROOT, 'visits', petId, page],
-    queryFn: () => historyApi.visits({ petId, page, pageSize: HISTORY_PAGE_SIZE }),
-    enabled: petId !== null,
+    queryKey: [...HISTORY_ROOT, 'visits', petId, date, page],
+    queryFn: () => historyApi.visits({ petId, date, page, pageSize: HISTORY_PAGE_SIZE }),
+    enabled: petId !== null || date !== null,
     placeholderData: (previous) => previous,
   })
 }
