@@ -160,6 +160,7 @@ function DrugStockList() {
       <DrugStockHistoryDialog
         drugId={history?.drugId ?? null}
         drugName={history?.drugName ?? ''}
+        canWrite={canWrite}
         open={history !== null}
         onOpenChange={(open) => {
           if (!open) setHistory(null)

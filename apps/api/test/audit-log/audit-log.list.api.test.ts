@@ -49,6 +49,24 @@ describe('GET /api/audit-logs', () => {
     expect(typeof row.userId).toBe('number')
     expect(row.module).toBe(module)
     expect(typeof row.userName).toBe('string')
+    // module ที่ไม่มีตัวแปล subject → null ไม่ใช่ undefined ที่หายไปจาก wire
+    expect(row.subject).toBeNull()
+    expect(typeof row.risk).toBe('boolean')
+  })
+
+  test('action อยู่ใน allowlist ความเสี่ยง → risk เป็น true บน wire', async () => {
+    const marker = 555_555_555
+    await db.auditLog.create({
+      data: { module: 'employee', action: 'employee.delete', userId: 1n, recordId: marker, after: {} },
+    })
+
+    const res = await get('?module=employee&pageSize=200')
+    const body = await readJson(res)
+    const row = body.data.find((r: { recordId: number }) => r.recordId === marker)
+
+    expect(row?.risk).toBe(true)
+
+    await db.auditLog.deleteMany({ where: { module: 'employee', recordId: marker } })
   })
 
   test('กรองด้วย module → เห็นเฉพาะของ module นั้น', async () => {
@@ -101,6 +119,28 @@ describe('GET /api/audit-logs/modules', () => {
 
   test('ไม่ได้ล็อกอิน → 401', async () => {
     const res = await app.handle(new Request('http://localhost/api/audit-logs/modules'))
+
+    expect(res.status).toBe(401)
+  })
+})
+
+describe('GET /api/audit-logs/actors', () => {
+  test('มีบันทึกอยู่ → 200 คืน id/name ของคนที่เคยทำ', async () => {
+    const module = `${MODULE_PREFIX}ACTORLIST`
+    await makeLog(module, 1n)
+
+    const res = await app.handle(
+      new Request('http://localhost/api/audit-logs/actors', { headers: { cookie } }),
+    )
+    const body = await readJson(res)
+
+    expect(res.status).toBe(200)
+    const row = body.data.find((a: { id: number }) => a.id === 1)
+    expect(typeof row?.name).toBe('string')
+  })
+
+  test('ไม่ได้ล็อกอิน → 401', async () => {
+    const res = await app.handle(new Request('http://localhost/api/audit-logs/actors'))
 
     expect(res.status).toBe(401)
   })

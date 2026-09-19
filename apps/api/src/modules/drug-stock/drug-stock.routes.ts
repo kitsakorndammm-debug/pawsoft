@@ -13,6 +13,7 @@ import {
   createDrugStockMovement,
   listDrugStockBalances,
   listDrugStockMovements,
+  reverseDrugStockMovement,
   type DrugStockBalance,
   type DrugStockMovementRow,
 } from './drug-stock.service.ts'
@@ -133,5 +134,24 @@ export const drugStockRoutes = new Elysia({ prefix: '/api/drug-stock' })
       body: createSchema,
       transform: [guardDrugStockWrite, refuseUnknownFields(WRITE_FIELDS)],
       detail: { tags: ['สต็อกยา'], summary: 'บันทึกปรับยอดสต็อกยา' },
+    },
+  )
+
+  .post(
+    '/movements/:id/reverse',
+    async ({ params, set, ...ctx }) => {
+      const actor = await getActor(ctx)
+      set.status = 201
+
+      const created = await reverseDrugStockMovement(parseId(params.id), actor.userId)
+
+      return ok(movementToWire(created))
+    },
+    {
+      beforeHandle: guardDrugStockWrite,
+      detail: {
+        tags: ['สต็อกยา'],
+        summary: 'ย้อนรายการรับเข้า/ปรับยอดที่บันทึกผิด (สร้างรายการปรับยอดตรงข้ามใหม่)',
+      },
     },
   )

@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia'
 import { invalid } from '../../kit/app-error.ts'
 import { ok, paged } from '../../kit/response.ts'
 import { guardAuditLogRead, parseIdFilter, refuseUnknownQuery } from '../../kit/route-guard.ts'
-import { listAuditLogModules, listAuditLogs, type AuditLogRow } from './audit-log.service.ts'
+import { listAuditLogActors, listAuditLogModules, listAuditLogs, type AuditLogRow } from './audit-log.service.ts'
 
 /**
  * ประวัติการใช้งาน (audit log) — **อ่านอย่างเดียว**
@@ -22,6 +22,8 @@ const toWire = (r: AuditLogRow) => ({
   createdAt: r.createdAt.toISOString(),
   userId: Number(r.userId),
   userName: r.userName,
+  subject: r.subject,
+  risk: r.risk,
 })
 
 const LIST_QUERY_KEYS = new Set(['module', 'userId', 'date', 'page', 'pageSize'])
@@ -66,5 +68,9 @@ export const auditLogRoutes = new Elysia({ prefix: '/api/audit-logs' })
   )
 
   .get('/modules', async () => ok(await listAuditLogModules()), {
+    beforeHandle: guardAuditLogRead,
+  })
+
+  .get('/actors', async () => ok(await listAuditLogActors()), {
     beforeHandle: guardAuditLogRead,
   })

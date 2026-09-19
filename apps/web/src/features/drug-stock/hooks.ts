@@ -43,3 +43,15 @@ export function useCreateDrugStockMovement() {
     },
   })
 }
+
+export function useReverseDrugStockMovement() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (movementId: number) => drugStockApi.reverse(movementId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: LIST_ROOT })
+      void queryClient.invalidateQueries({ queryKey: MOVEMENTS_ROOT })
+    },
+  })
+}

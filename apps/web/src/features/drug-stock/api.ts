@@ -3,7 +3,9 @@ import { api } from '@/lib/api-client'
 /**
  * สัญญากับ `/api/drug-stock`
  *
- * ตารางนี้เป็น log — ไม่มี `update`/`delete` ทั้งฝั่ง BE และฝั่งนี้
+ * ตารางนี้เป็น log — **ไม่มี `update`/`delete` ทั้งฝั่ง BE และฝั่งนี้** แก้รายการเก่าไม่ได้
+ * เลย · รายการที่บันทึกผิด แก้ด้วย `reverse()` แทน — สร้างรายการปรับยอดตรงข้ามให้ใหม่
+ * ของเดิมยังอยู่ครบ (ผู้ใช้ตัดสิน 2026-09-20)
  */
 
 /** ยอดคงเหลือหนึ่งแถวต่อยาหนึ่งตัว */
@@ -79,4 +81,8 @@ export const drugStockApi = {
   // ไม่แบ่งหน้า — ประวัติของยาตัวเดียว (ผู้ใช้ตัดสิน 2026-09-08)
   movements: (drugId: number) =>
     api.get<DrugStockMovementRow[]>(`/api/drug-stock/${drugId}/movements`),
+
+  /** ย้อนรายการรับเข้า/ปรับยอดที่บันทึกผิด — เฉพาะสองประเภทนี้ (BE ปฏิเสธ DISPENSE) */
+  reverse: (movementId: number) =>
+    api.post<DrugStockMovement>(`/api/drug-stock/movements/${movementId}/reverse`),
 }

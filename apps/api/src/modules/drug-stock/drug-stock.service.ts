@@ -306,3 +306,70 @@ export async function recordDispenseStockMovement(
 
   return created
 }
+
+/**
+ * ย้อนรายการรับเข้า/ปรับยอดที่บันทึกผิด — **สร้างรายการปรับยอดตรงข้ามใหม่ ไม่แก้ของเดิม**
+ * (ผู้ใช้ตัดสิน 2026-09-20: "กันพนักงานพลาด" แต่ต้องไม่ทำให้ประวัติเชื่อไม่ได้)
+ *
+ * แก้ไข/ลบของเดิมตรง ๆ ทำไม่ได้ในระบบนี้โดยตั้งใจ — ยอดคงเหลือคือผลรวมของทุกแถว ถ้าแก้
+ * แถวเก่าได้ ยอดวันนี้จะเปลี่ยนแบบไม่มีร่องรอยว่าใครแก้อะไรตอนไหน การย้อนแบบนี้ยังเห็น
+ * ทั้งของเดิมและรายการที่แก้ ตรวจสอบย้อนหลังได้ครบ
+ *
+ * **ย้อนได้เฉพาะ `RECEIVE`/`ADJUST`** — `DISPENSE`/`DISPENSE_REVERSED` ผูกกับคิวจริง
+ * ต้องแก้ผ่านหน้าคิว (ลบ/เพิ่มรายการยาใหม่) ไม่ใช่ย้อนตรงนี้ ไม่งั้นยอดสต็อกกับรายการ
+ * ในบิลจะไม่ตรงกัน
+ */
+export async function reverseDrugStockMovement(
+  movementId: bigint,
+  actorId: bigint,
+  outerTx?: Tx,
+): Promise<DrugStockMovement> {
+  return inTx(outerTx, async (tx) => {
+    const original = await tx.drugStockMovement.findUnique({ where: { id: movementId } })
+    if (!original) throw notFound('ไม่พบรายการนี้', { field: 'id' })
+
+    if (original.type !== 'RECEIVE' && original.type !== 'ADJUST') {
+      throw invalid('ย้อนได้เฉพาะรายการรับเข้าหรือปรับยอดที่บันทึกเอง', {
+        field: 'type',
+        type: original.type,
+      })
+    }
+
+    const reversedQuantity = original.quantity.negated()
+
+    const balance = await currentBalance(tx, original.drugId)
+    if (balance.add(reversedQuantity).isNegative()) {
+      throw invalid('ย้อนรายการนี้แล้วยอดคงเหลือจะติดลบ', { field: 'quantity' })
+    }
+
+    const reason = `ย้อนรายการ #${original.id}${original.reason ? ` (${original.reason})` : ''}`.slice(
+      0,
+      REASON_MAX,
+    )
+
+    const created = await tx.drugStockMovement.create({
+      data: {
+        drugId: original.drugId,
+        type: 'ADJUST',
+        quantity: reversedQuantity,
+        reason,
+        createdBy: actorId,
+      },
+    })
+
+    await writeAudit(tx, {
+      action: `${MODULE}.reverse`,
+      module: MODULE,
+      recordId: created.id,
+      after: {
+        reversedMovementId: Number(original.id),
+        drugId: created.drugId.toString(),
+        quantity: created.quantity.toString(),
+        reason: created.reason,
+      },
+      userId: actorId,
+    })
+
+    return created
+  })
+}

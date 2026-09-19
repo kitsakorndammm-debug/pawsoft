@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
 import { isAppError } from '../../src/kit/app-error.ts'
+import { SYSTEM_USER_ID } from '../../src/kit/actor.ts'
 import { db } from '../../src/kit/db.ts'
-import { listAuditLogModules, listAuditLogs } from '../../src/modules/audit-log/audit-log.service.ts'
+import {
+  listAuditLogActors,
+  listAuditLogModules,
+  listAuditLogs,
+} from '../../src/modules/audit-log/audit-log.service.ts'
 
 /**
  * ประวัติการใช้งาน (audit log) · ดูรายการ
@@ -145,5 +150,126 @@ describe('ประวัติการใช้งาน · รายชื่
     const modules = await listAuditLogModules()
 
     expect(modules.filter((m) => m === module).length).toBe(1)
+  })
+})
+
+describe('ประวัติการใช้งาน · เกี่ยวกับใคร (subject)', () => {
+  const NAME_PREFIX = 'TEST-AUDIT-SUBJECT-'
+
+  afterEach(async () => {
+    const owners = await db.owner.findMany({
+      where: { name: { startsWith: NAME_PREFIX } },
+      select: { id: true },
+    })
+    const drugs = await db.drug.findMany({
+      where: { name: { startsWith: NAME_PREFIX } },
+      select: { id: true },
+    })
+    await db.auditLog.deleteMany({
+      where: {
+        OR: [
+          { module: 'owner', recordId: { in: owners.map((o) => o.id) } },
+          { module: 'drug', recordId: { in: drugs.map((d) => d.id) } },
+        ],
+      },
+    })
+    await db.owner.deleteMany({ where: { name: { startsWith: NAME_PREFIX } } })
+    await db.drug.deleteMany({ where: { name: { startsWith: NAME_PREFIX } } })
+  })
+
+  test('module owner → subject เป็นชื่อเจ้าของสัตว์จริง', async () => {
+    const owner = await db.owner.create({
+      data: {
+        name: `${NAME_PREFIX}สมชาย`,
+        code: `TASUB${Date.now()}`,
+        createdBy: SYSTEM_USER_ID,
+        updatedBy: SYSTEM_USER_ID,
+      },
+    })
+    await db.auditLog.create({
+      data: { module: 'owner', action: 'owner.update', userId: 1n, recordId: owner.id, after: {} },
+    })
+
+    const result = await listAuditLogs({ module: 'owner', pageSize: 200 })
+    const row = result.rows.find((r) => r.recordId === owner.id)
+
+    expect(row?.subject).toBe(`${NAME_PREFIX}สมชาย`)
+  })
+
+  test('module drug (ทะเบียน) → subject เป็นชื่อยาจริง', async () => {
+    const drug = await db.drug.create({
+      data: { name: `${NAME_PREFIX}พารา`, createdBy: SYSTEM_USER_ID, updatedBy: SYSTEM_USER_ID },
+    })
+    await db.auditLog.create({
+      data: { module: 'drug', action: 'drug.update', userId: 1n, recordId: drug.id, after: {} },
+    })
+
+    const result = await listAuditLogs({ module: 'drug', pageSize: 200 })
+    const row = result.rows.find((r) => r.recordId === drug.id)
+
+    expect(row?.subject).toBe(`${NAME_PREFIX}พารา`)
+  })
+
+  test('module ที่ยังไม่มีตัวแปล → subject เป็น null ไม่พัง', async () => {
+    const module = `${MODULE_PREFIX}UNKNOWN`
+    await makeLog({ module, action: `${module}.a`, userId: 1n, createdAt: new Date(), recordId: 42n })
+
+    const result = await listAuditLogs({ module })
+
+    expect(result.rows[0]?.subject).toBeNull()
+  })
+
+  test('recordId เป็น null → subject เป็น null', async () => {
+    const module = `${MODULE_PREFIX}NORECORD`
+    await makeLog({ module, action: `${module}.a`, userId: 1n, createdAt: new Date(), recordId: null })
+
+    const result = await listAuditLogs({ module })
+
+    expect(result.rows[0]?.subject).toBeNull()
+  })
+})
+
+describe('ประวัติการใช้งาน · ไฮไลต์การกระทำสำคัญ', () => {
+  const marker = 987_654_321n
+
+  afterEach(async () => {
+    await db.auditLog.deleteMany({ where: { module: 'employee', recordId: marker } })
+  })
+
+  test('action อยู่ใน allowlist → risk เป็น true', async () => {
+    await makeLog({
+      module: 'employee',
+      action: 'employee.delete',
+      userId: 1n,
+      createdAt: new Date(),
+      recordId: marker,
+    })
+
+    const result = await listAuditLogs({ module: 'employee', pageSize: 200 })
+    const row = result.rows.find((r) => r.recordId === marker)
+
+    expect(row?.risk).toBe(true)
+  })
+
+  test('action ธรรมดา → risk เป็น false', async () => {
+    const module = `${MODULE_PREFIX}NORMAL`
+    await makeLog({ module, action: `${module}.create`, userId: 1n, createdAt: new Date() })
+
+    const result = await listAuditLogs({ module })
+
+    expect(result.rows[0]?.risk).toBe(false)
+  })
+})
+
+describe('ประวัติการใช้งาน · รายชื่อคนทำ (actor)', () => {
+  test('คืน userId/ชื่อของคนที่มีแถวจริง ไม่ซ้ำ', async () => {
+    const module = `${MODULE_PREFIX}ACTOR`
+    await makeLog({ module, action: `${module}.a`, userId: 1n, createdAt: new Date() })
+    await makeLog({ module, action: `${module}.b`, userId: 1n, createdAt: new Date() })
+
+    const actors = await listAuditLogActors()
+
+    expect(actors.filter((a) => a.id === 1).length).toBe(1)
+    expect(actors.find((a) => a.id === 1)?.name.length).toBeGreaterThan(0)
   })
 })

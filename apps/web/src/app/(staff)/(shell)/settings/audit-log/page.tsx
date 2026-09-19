@@ -1,6 +1,6 @@
 'use client'
 
-import { History } from 'lucide-react'
+import { AlertTriangle, History } from 'lucide-react'
 import { useQueryState } from 'nuqs'
 import { Suspense, useState } from 'react'
 
@@ -21,10 +21,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { AUDIT_LOG_PAGE_SIZE, useAuditLogModules, useAuditLogs } from '@/features/audit-log/hooks'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  AUDIT_LOG_PAGE_SIZE,
+  useAuditLogActors,
+  useAuditLogModules,
+  useAuditLogs,
+} from '@/features/audit-log/hooks'
 import type { AuditLogRow } from '@/features/audit-log/api'
 import { formatFieldValue, labelForAction, labelForField, labelForModule } from '@/features/audit-log/labels'
 import { toErrorMessage } from '@/lib/api-client'
+import { cn } from '@/lib/utils'
 
 /**
  * ประวัติการใช้งาน (audit log) — **อ่านอย่างเดียว**
@@ -34,6 +41,10 @@ import { toErrorMessage } from '@/lib/api-client'
  */
 function AuditLogBoard() {
   const [module, setModule] = useQueryState('module', { defaultValue: '', clearOnDefault: true })
+  const [userId, setUserId] = useQueryState('userId', {
+    defaultValue: '',
+    clearOnDefault: true,
+  })
   const [date, setDate] = useQueryState('date', { defaultValue: '', clearOnDefault: true })
   const [page, setPage] = useQueryState('page', {
     defaultValue: 1,
@@ -44,10 +55,12 @@ function AuditLogBoard() {
 
   const { data, isPending, isFetching, isError, error } = useAuditLogs({
     module: module || null,
+    userId: userId ? Number(userId) : null,
     date: date || null,
     page,
   })
   const modules = useAuditLogModules()
+  const actors = useAuditLogActors()
 
   const [detail, setDetail] = useState<AuditLogRow | null>(null)
 
@@ -74,15 +87,33 @@ function AuditLogBoard() {
       key: 'action',
       title: 'การกระทำ',
       truncate: true,
-      render: (row) => labelForAction(row.module, row.action),
+      render: (row) => (
+        <span className="flex items-center gap-1.5">
+          {row.risk ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <AlertTriangle
+                    className="size-3.5 shrink-0 text-destructive"
+                    aria-label="การกระทำที่ควรสังเกต"
+                  />
+                }
+              />
+              <TooltipContent>ควรสังเกต — ลบ/ระงับบัญชี/ตีกลับเงิน ฯลฯ</TooltipContent>
+            </Tooltip>
+          ) : null}
+          <span className={cn('truncate', row.risk && 'font-medium text-destructive')}>
+            {labelForAction(row.module, row.action)}
+          </span>
+        </span>
+      ),
     },
     {
-      key: 'recordId',
-      title: 'แถวที่',
-      width: 90,
-      align: 'right',
+      key: 'subject',
+      title: 'เกี่ยวกับ',
+      truncate: true,
       render: (row) => (
-        <span className="tabular-nums text-muted-foreground">{row.recordId ?? '—'}</span>
+        <span className="text-muted-foreground">{row.subject ?? row.recordId ?? '—'}</span>
       ),
     },
     { key: 'userName', title: 'ผู้ทำ', width: 160, dataIndex: 'userName' },
@@ -120,6 +151,26 @@ function AuditLogBoard() {
               {(modules.data ?? []).map((m) => (
                 <SelectItem key={m} value={m}>
                   {labelForModule(m)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={userId || 'ALL'}
+            onValueChange={(v) => {
+              void setUserId(v === 'ALL' ? '' : v)
+              void setPage(1)
+            }}
+          >
+            <SelectTrigger className="w-40" aria-label="กรองตามผู้ทำ">
+              <SelectValue placeholder="ทุกคน" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">ทุกคน</SelectItem>
+              {(actors.data ?? []).map((a) => (
+                <SelectItem key={a.id} value={String(a.id)}>
+                  {a.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -247,6 +298,12 @@ function AuditLogDetailDialog({
           <DialogTitle className="flex items-center gap-2">
             <History className="size-5 text-primary-strong" />
             {row ? labelForAction(row.module, row.action) : ''}
+            {row?.risk ? (
+              <span className="flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-normal text-destructive">
+                <AlertTriangle className="size-3" />
+                ควรสังเกต
+              </span>
+            ) : null}
           </DialogTitle>
         </DialogHeader>
 
@@ -266,8 +323,8 @@ function AuditLogDetailDialog({
                 <dd>{labelForModule(row.module)}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-muted-foreground">แถวที่</dt>
-                <dd>{row.recordId ?? '—'}</dd>
+                <dt className="text-muted-foreground">เกี่ยวกับ</dt>
+                <dd className="text-right">{row.subject ?? row.recordId ?? '—'}</dd>
               </div>
               <div className="flex justify-between gap-2">
                 <dt className="text-muted-foreground">ที่มา</dt>
