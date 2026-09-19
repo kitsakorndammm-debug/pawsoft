@@ -49,7 +49,7 @@ export function AppHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center gap-3 border-b bg-background px-4 shadow-xs">
+    <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center gap-3 border-b bg-background px-4 shadow-sm">
       <Link
         href={ROUTE_HOME}
         className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-muted"

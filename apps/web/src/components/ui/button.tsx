@@ -9,10 +9,11 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // shadow-xs → hover:shadow-sm ให้ปุ่มที่ "เขียนข้อมูล/เดินหน้าต่อ" รู้สึกยกตัวนิดเดียว
-        // ตอนชี้เมาส์ (ผู้ใช้ตัดสิน 2026-09-20) — ปุ่ม outline/ghost/secondary ไม่มี เพราะพวกนั้น
-        // เป็นปุ่มรอง สีจางอยู่แล้ว การเพิ่มเงาให้ปุ่มรองจะแย่งสายตาจากปุ่มหลัก
-        default: 'bg-primary text-primary-foreground shadow-xs hover:shadow-sm [a]:hover:bg-primary/80',
+        // shadow-sm → hover:shadow-md + ยกตัวนิดหน่อยตอนชี้เมาส์ ให้ปุ่มที่ "เขียนข้อมูล/
+        // เดินหน้าต่อ" รู้สึกมีมิติจับต้องได้ชัดเจน (ผู้ใช้ตัดสิน 2026-09-20 รอบสอง — "ปรับเยอะ")
+        // ปุ่ม outline/ghost/secondary ไม่มี เพราะเป็นปุ่มรอง สีจางอยู่แล้ว เพิ่มเงาจะแย่งสายตา
+        default:
+          'bg-primary text-primary-foreground shadow-sm hover:-translate-y-0.5 hover:shadow-md [a]:hover:bg-primary/80',
         outline:
           'border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50',
         secondary:
@@ -22,11 +23,11 @@ const buttonVariants = cva(
         destructive:
           'bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40',
         destructiveSolid:
-          'bg-destructive text-white shadow-xs hover:shadow-sm hover:bg-destructive/90 focus-visible:border-destructive/40 focus-visible:ring-destructive/30',
+          'bg-destructive text-white shadow-sm hover:-translate-y-0.5 hover:shadow-md hover:bg-destructive/90 focus-visible:border-destructive/40 focus-visible:ring-destructive/30',
         success:
-          'bg-emerald-500 text-white shadow-xs hover:shadow-sm hover:bg-emerald-600 focus-visible:border-emerald-500/40 focus-visible:ring-emerald-500/30',
+          'bg-emerald-500 text-white shadow-sm hover:-translate-y-0.5 hover:shadow-md hover:bg-emerald-600 focus-visible:border-emerald-500/40 focus-visible:ring-emerald-500/30',
         warning:
-          'bg-orange-500 text-white shadow-xs hover:shadow-sm hover:bg-orange-600 focus-visible:border-orange-500/40 focus-visible:ring-orange-500/30',
+          'bg-orange-500 text-white shadow-sm hover:-translate-y-0.5 hover:shadow-md hover:bg-orange-600 focus-visible:border-orange-500/40 focus-visible:ring-orange-500/30',
         /**
          * เหลืองอำพัน — **การกระทำที่พาไปทำอย่างอื่นต่อ** ไม่ใช่ทางออกปกติของกล่อง
          *
@@ -38,7 +39,7 @@ const buttonVariants = cva(
          * จะไม่มีสีเหลือให้มัน
          */
         continueAction:
-          'bg-amber-500 text-white shadow-xs hover:shadow-sm hover:bg-amber-600 focus-visible:border-amber-500/40 focus-visible:ring-amber-500/30',
+          'bg-amber-500 text-white shadow-sm hover:-translate-y-0.5 hover:shadow-md hover:bg-amber-600 focus-visible:border-amber-500/40 focus-visible:ring-amber-500/30',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
