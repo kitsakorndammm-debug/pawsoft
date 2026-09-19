@@ -27,6 +27,7 @@ import {
 } from './modules/appointment/appointment.routes.ts'
 import { visitRoutes } from './modules/visit/visit.routes.ts'
 import { invoiceRoutes, myInvoiceRoutes, promptPayRoutes } from './modules/payment/payment.routes.ts'
+import { historyRoutes } from './modules/history/history.routes.ts'
 
 /**
  * ตัวแอป — ไม่ผูกพอร์ต
@@ -127,6 +128,9 @@ export const app = new Elysia()
   // การเงิน — ใบเสร็จ รับเงิน และ recheck ของบัญชี
   .use(invoiceRoutes)
   .use(promptPayRoutes)
+
+  // ประวัติ — เปิดให้พนักงานทุกคนดูย้อนหลังได้ ไม่ต้องมีสิทธิ์เฉพาะ
+  .use(historyRoutes)
 
   /**
    * ฝั่งลูกค้า — **ประกาศหลังของพนักงานทั้งหมด**

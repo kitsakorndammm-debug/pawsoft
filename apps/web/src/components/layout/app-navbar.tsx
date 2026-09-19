@@ -3,6 +3,7 @@
 import {
   CalendarDays,
   Cog,
+  History,
   ListOrdered,
   PawPrint,
   Wallet,
@@ -18,6 +19,7 @@ import { BILLING_READ, RECEPTION_READ } from '@/lib/permissions'
 import {
   ROUTE_APPOINTMENTS,
   ROUTE_BILLING,
+  ROUTE_HISTORY,
   ROUTE_OWNERS,
   ROUTE_PETS,
   ROUTE_QUEUE,
@@ -38,8 +40,13 @@ interface NavItem {
   href: string
   /** path ที่ขึ้นต้นด้วยตัวนี้ ถือว่าอยู่ในแท็บนี้ */
   activePrefix: string
-  /** ไม่มีสิทธิ์สักตัวในกลุ่มนี้ = ไม่เห็นแท็บ */
-  requiredAny: readonly string[]
+  /**
+   * ไม่มีสิทธิ์สักตัวในกลุ่มนี้ = ไม่เห็นแท็บ
+   *
+   * **`undefined` แปลว่าเห็นได้ทุกคนที่ล็อกอินอยู่ ไม่ต้องมีสิทธิ์เฉพาะ** — ใช้กับ
+   * "ประวัติ" (ผู้ใช้ตัดสิน 2026-09-18: "เข้าระบบได้ก็ดูได้เลย")
+   */
+  requiredAny?: readonly string[] | undefined
 }
 
 const RECEPTION_ANY = [RECEPTION_READ] as const
@@ -85,6 +92,13 @@ const NAV_ITEMS: NavItem[] = [
     requiredAny: [BILLING_READ],
   },
   {
+    label: 'ประวัติ',
+    icon: History,
+    href: ROUTE_HISTORY,
+    activePrefix: ROUTE_HISTORY,
+    // ไม่มี requiredAny โดยตั้งใจ — ทุกคนที่ล็อกอินได้เห็นแท็บนี้
+  },
+  {
     label: 'ข้อมูลหลัก',
     icon: Cog,
     href: ROUTE_SETTINGS,
@@ -94,7 +108,10 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 function NavTab({ item, pathname }: { item: NavItem; pathname: string }) {
-  const allowed = useCanAny(item.requiredAny)
+  // เรียก hook เสมอ (สม่ำเสมอทุก render) แล้วค่อยตัดสินใจว่าจะใช้ผลมันหรือไม่ —
+  // `requiredAny: undefined` แปลว่าเห็นได้ทุกคน ไม่ต้องพึ่งผลของ `useCanAny` เลย
+  const anyGranted = useCanAny(item.requiredAny ?? [])
+  const allowed = item.requiredAny === undefined ? true : anyGranted
   if (!allowed) return null
 
   const isActive = pathname.startsWith(item.activePrefix)

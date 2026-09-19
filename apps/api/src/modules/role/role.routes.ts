@@ -14,6 +14,7 @@ import {
   refuseUnknownQuery,
 } from '../../kit/route-guard.ts'
 import { invalid } from '../../kit/app-error.ts'
+import { NOT_GRANTABLE } from '../../kit/permissions.ts'
 import {
   createRole,
   deleteRole,
@@ -219,6 +220,9 @@ export const permissionRoutes = new Elysia({ prefix: '/api/permissions' }).get(
     refuseUnknownQuery(request.url, NO_QUERY)
 
     const rows = await db.permission.findMany({
+      // `NOT_GRANTABLE` (เช่น audit log) ไม่โผล่ในหน้าติ๊กสิทธิ์ของบทบาทไหนเลย —
+      // ดู `///` บน `AUDIT_LOG_PERMISSION` ใน `kit/permissions.ts`
+      where: { key: { notIn: [...NOT_GRANTABLE] } },
       orderBy: [{ groupCode: 'asc' }, { key: 'asc' }],
       select: { key: true, label: true, groupCode: true, groupName: true },
     })

@@ -35,6 +35,12 @@ export const ROUTE_PETS = '/pets'
 export const ROUTE_BILLING = '/billing'
 export const ROUTE_DIAGRAMS = '/diagrams'
 
+// ---- ประวัติ — เปิดให้พนักงานทุกคนดู ไม่ต้องมีสิทธิ์เฉพาะ ----
+export const ROUTE_HISTORY = '/history'
+export const ROUTE_HISTORY_DRUGS = '/history/drugs'
+export const ROUTE_HISTORY_PAYMENTS = '/history/payments'
+export const ROUTE_HISTORY_TREATMENTS = '/history/treatments'
+
 // ---- ฝั่งเจ้าของสัตว์ ----
 export const ROUTE_OWNER_BOOKING = '/owner/booking'
 export const ROUTE_OWNER_INVOICES = '/owner/invoices'
