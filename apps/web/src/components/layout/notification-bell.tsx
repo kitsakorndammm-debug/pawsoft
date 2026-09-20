@@ -22,6 +22,9 @@ import { ROUTE_APPOINTMENTS, ROUTE_BILLING, ROUTE_DRUG_STOCK, ROUTE_QUEUE } from
 
 const POLL_MS = 20_000
 
+/** เตือนที่กระดิ่งเมื่อยอดยาเหลือเท่านี้หรือน้อยกว่า */
+const LOW_STOCK_THRESHOLD = 5
+
 /**
  * กระดิ่งแจ้งเตือน — อยู่ข้าง ๆ ปุ่มออกจากระบบ (ผู้ใช้ตัดสิน 2026-09-09)
  *
@@ -98,9 +101,12 @@ function NotificationBellContent({
     ? (queue.data ?? []).filter((r) => r.status === 'WAITING' && r.triage === 'EMERGENCY')
     : []
 
-  /** ยาที่ยอดคงเหลือหมดหรือติดลบ — สัญญาณว่าต้องไปบันทึกรับเข้าจริง (ดูหน้าคลังยา) */
+  /**
+   * ยาที่เหลือน้อย (≤ `LOW_STOCK_THRESHOLD`) หรือหมด/ติดลบ — สัญญาณให้ไปเบิกจากคลังก่อนหมดจริง
+   * (ผู้ใช้ตัดสิน 2026-09-20: เตือนตอนเหลือ 5 ดีกว่ารอให้หมด · ยังไม่ห้ามจ่าย ไม่ให้สกัดงานหมอ)
+   */
   const lowStockRows = canSeeStock
-    ? (stock.data ?? []).filter((d) => Number(d.quantity) <= 0)
+    ? (stock.data ?? []).filter((d) => Number(d.quantity) <= LOW_STOCK_THRESHOLD)
     : []
 
   const totalCount = appointmentCount + invoiceCount + emergencyRows.length + lowStockRows.length
@@ -320,7 +326,7 @@ function InvoiceSection({
 }
 
 /**
- * ยาที่ยอดคงเหลือ ≤ 0 — ของคนดูสต็อกยา (`main:drug-stock:read`)
+ * ยาที่ยอดคงเหลือเหลือน้อย (≤ LOW_STOCK_THRESHOLD) — ของคนดูสต็อกยา (`main:drug-stock:read`)
  *
  * **ไม่มีปุ่มกดจบในตัว** ต่างจากส่วนอื่น — การเติมสต็อกต้องกรอกจำนวน/เหตุผลในฟอร์ม
  * ยัดลงกล่องเล็ก ๆ นี้ไม่ไหว จึงพาไปหน้าคลังยาแทน (เหมือนกระดิ่งฝั่งลูกค้าที่พาไปหน้าใบเสร็จ)
@@ -328,7 +334,7 @@ function InvoiceSection({
 function StockSection({ rows }: { rows: DrugStockBalance[] }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <SectionHeader label="ยาหมด/ติดลบ" count={rows.length} />
+      <SectionHeader label="ยาใกล้หมด/หมด" count={rows.length} />
       <div className="flex max-h-60 flex-col gap-1.5 overflow-y-auto">
         {rows.map((row) => (
           <div
