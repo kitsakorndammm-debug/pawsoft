@@ -68,6 +68,7 @@ export const ACTION_LABEL: Record<string, string> = {
   'drug-stock.create': 'บันทึกรับยาเข้า/ปรับยอดสต็อก',
   'drug-stock.dispense': 'ตัดสต็อกยา (จ่ายให้คนไข้)',
   'drug-stock.dispense-reversed': 'คืนสต็อกยา (ยกเลิกรายการจ่าย)',
+  'drug-stock.reverse': 'ย้อนรายการสต็อกยาที่บันทึกผิด',
   'warehouse-stock.create': 'บันทึกรับยาเข้าคลัง',
   'warehouse-stock.withdraw': 'เบิกยาออกจากคลัง',
 
@@ -106,6 +107,11 @@ export const ACTION_LABEL: Record<string, string> = {
   'pet.set-deceased': 'บันทึกวันที่สัตว์เสียชีวิต',
   'pet.photo': 'เปลี่ยนรูปสัตว์เลี้ยง',
   'pet.photo_clear': 'ลบรูปสัตว์เลี้ยง',
+
+  // บทบาทและสิทธิ์
+  'role.create': 'สร้างบทบาทใหม่',
+  'role.update': 'แก้ไขบทบาท/สิทธิ์',
+  'role.delete': 'ลบบทบาท',
 
   // ข้อมูลหลัก — ทะเบียนที่มี sortOrder ใช้รูปแบบเดียวกันหมด (create/update/delete/move)
   'department.create': 'เพิ่มแผนกใหม่',
@@ -194,6 +200,7 @@ export const FIELD_LABEL: Record<string, string> = {
   walkInPetName: 'ชื่อสัตว์ (walk-in)',
   walkInOwnerName: 'ชื่อเจ้าของ (walk-in)',
   sortOrder: 'ลำดับ',
+  reversedMovementId: 'ย้อนรายการที่',
 }
 
 /** ค่าของฟิลด์ enum บางตัว แปลตาม module ที่มันสังกัด — ใช้ label เดียวกับที่หน้าจออื่นใช้ */

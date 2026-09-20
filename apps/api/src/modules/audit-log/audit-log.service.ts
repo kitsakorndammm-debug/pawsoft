@@ -295,6 +295,7 @@ async function resolveSubjects(
     ['breed', (w) => at.breed.findMany({ where: w, select: { id: true, name: true } })],
     ['drug-category', (w) => at.drugCategory.findMany({ where: w, select: { id: true, name: true } })],
     ['service-category', (w) => at.serviceCategory.findMany({ where: w, select: { id: true, name: true } })],
+    ['role', (w) => at.role.findMany({ where: w, select: { id: true, name: true } })],
   ]
   for (const [module, query] of catalog) {
     if (!idsByModule.has(module)) continue
