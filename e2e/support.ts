@@ -17,7 +17,17 @@ export const USERS = {
   admin: 'admin',
 } as const
 
-export const ADMIN_PASSWORD = '1234'
+/**
+ * **อ่านจาก `SEED_ADMIN_PASSWORD` ของเครื่องนี้ ไม่ใช่ค่าตายตัว** (แก้ 2026-09-22)
+ *
+ * เดิมเขียน `'1234'` ตรง ๆ ซึ่งตรงกับ `.env` ตอนเขียนไฟล์นี้ครั้งแรก แต่พอมีคนเปลี่ยน
+ * `SEED_ADMIN_PASSWORD` ในเครื่อง dev ภายหลัง (ไม่ได้ commit เพราะ `.env` อยู่ใน
+ * `.gitignore`) รหัสที่ seed จริงกับค่าคงที่ในนี้ก็เพี้ยนจากกันไปเงียบ ๆ — ทุกเทสที่
+ * ล็อกอินเป็น admin ค้างที่หน้า `/login` โดยไม่มีข้อความบอกว่าทำไม
+ *
+ * อ่านจาก env ที่เดียวกับที่ `seed-e2e-db.ts` ใช้จริง จึงตรงกันเสมอไม่ว่าเครื่องไหน
+ */
+export const ADMIN_PASSWORD = process.env['SEED_ADMIN_PASSWORD'] ?? '1234'
 
 /** ล็อกอินฝั่งพนักงาน — รอจนออกจากหน้าล็อกอินจริง ไม่ใช่แค่กดปุ่มแล้วไปต่อ */
 export async function loginStaff(
@@ -46,6 +56,18 @@ export async function loginStaff(
  * จะค้างอยู่ตรงนั้นตลอด เพราะยังไม่ได้ยืนยัน
  */
 export async function logoutStaff(page: Page): Promise<void> {
+  /**
+   * **รอ toast ที่ค้างอยู่หายไปก่อน** — toast ขึ้นกลางบนจอ (`position="top-center"`)
+   * ทับปุ่มออกจากระบบพอดีบนจอแคบ (ฝั่ง owner ใช้ viewport มือถือ) ยิงคำสั่งที่จบด้วย
+   * toast สำเร็จแล้วรีบ logout ต่อทันที จะเจอ "element intercepts pointer events"
+   * เพราะ toast ยังไม่ทันหายไปเอง (อยู่ได้ 3 วิ) — เจอจริง 2026-09-22
+   */
+  await page
+    .locator('[data-sonner-toast]')
+    .first()
+    .waitFor({ state: 'hidden', timeout: 5_000 })
+    .catch(() => {})
+
   await page.getByRole('button', { name: 'ออกจากระบบ' }).click()
 
   const confirm = page.getByRole('alertdialog')

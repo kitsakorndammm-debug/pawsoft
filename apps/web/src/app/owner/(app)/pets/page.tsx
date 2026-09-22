@@ -135,7 +135,7 @@ function PetRow({
           onEdit()
         }
       }}
-      aria-label={`ดูข้อมูล ${pet.name}`}
+      aria-label={`แก้ไข ${pet.name}`}
       className="flex cursor-pointer items-center gap-3 rounded-2xl border bg-card p-3 hover:bg-accent"
     >
       {noPhoto ? (

@@ -40,7 +40,11 @@ test.describe('เส้นทางหลักฝั่งพนักงา�
     await loginStaff(page, USERS.counter)
 
     // มี reception:read — ต้องเห็นแท็บคิว
-    await expect(page.getByRole('link', { name: 'คิว' })).toBeVisible()
+    //
+    // **ขอบเขตที่ `nav` เท่านั้น** — หน้าแรกมีการ์ดสรุปคิว ("คิววันนี้ N คน ...")
+    // ที่ชื่อขึ้นต้นด้วย "คิว" เหมือนกัน `getByRole('link', { name: 'คิว' })` เฉย ๆ
+    // จะชนกับการ์ดนั้นแล้วโดน strict mode violation (เจอจริง 2026-09-22)
+    await expect(page.getByRole('navigation').getByRole('link', { name: 'คิว' })).toBeVisible()
 
     /**
      * **ไม่มี `hr:read` — แท็บพนักงานต้องไม่โผล่**
@@ -64,6 +68,7 @@ test.describe('เส้นทางหลักฝั่งพนักงา�
 
   test('admin เปลี่ยนหน้าไปมาได้ครบทุกเมนูหลัก', async ({ page }) => {
     await loginStaff(page, USERS.admin, ADMIN_PASSWORD)
+    const nav = page.getByRole('navigation')
 
     for (const [name, path] of [
       ['คิว', '/queue'],
@@ -72,7 +77,8 @@ test.describe('เส้นทางหลักฝั่งพนักงา�
       ['สัตว์เลี้ยง', '/pets'],
       ['การเงิน', '/billing'],
     ] as const) {
-      await page.getByRole('link', { name }).click()
+      // ขอบเขตที่ `nav` — เหตุผลเดียวกับเทสข้างบน กัน "คิว" ชนกับการ์ดสรุปคิวหน้าแรก
+      await nav.getByRole('link', { name }).click()
       await expect(page).toHaveURL(new RegExp(path), { timeout: 15_000 })
       // หน้าที่โหลดไม่ขึ้นจะไม่มี h1 — จับได้ตรงนี้ก่อนไปหน้าถัดไป
       await expect(page.locator('h1').first()).toBeVisible({ timeout: 15_000 })
