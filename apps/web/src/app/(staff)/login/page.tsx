@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, PawPrint } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,10 +54,10 @@ function LoginForm() {
   return (
     <form
       onSubmit={onSubmit}
-      className="flex w-full max-w-sm flex-col gap-4 rounded-lg border bg-card p-6"
+      className="flex w-full flex-col gap-4 rounded-2xl border bg-card p-6 shadow-lg shadow-black/[0.03]"
     >
       <div className="flex flex-col gap-1">
-        <h1 className="text-lg font-semibold">เข้าสู่ระบบ</h1>
+        <h2 className="text-lg font-semibold">เข้าสู่ระบบ</h2>
         <p className="text-xs text-muted-foreground">สำหรับพนักงานคลินิก</p>
       </div>
 
@@ -108,10 +108,37 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
-      <Suspense fallback={null}>
-        <LoginForm />
-      </Suspense>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+      {/* พื้นหลังตกแต่ง — ไล่สีจางๆ จากแบรนด์ + รอยอุ้งเท้าจางๆ ไม่แย่งสายตาจากฟอร์ม */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-primary/10 via-background to-background" />
+      <PawPrint
+        aria-hidden
+        className="pointer-events-none absolute -top-6 -left-10 -z-10 size-40 -rotate-[18deg] text-primary/[0.07]"
+      />
+      <PawPrint
+        aria-hidden
+        className="pointer-events-none absolute -right-12 bottom-4 -z-10 size-48 rotate-[16deg] text-primary/[0.07]"
+      />
+      <PawPrint
+        aria-hidden
+        className="pointer-events-none absolute top-28 right-16 -z-10 size-16 rotate-[10deg] text-primary/[0.06] sm:right-28"
+      />
+
+      <div className="flex w-full max-w-sm flex-col items-center gap-6">
+        <div className="flex flex-col items-center gap-2.5">
+          <span className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25">
+            <PawPrint className="size-7" />
+          </span>
+          <div className="text-center">
+            <h1 className="text-xl font-semibold">Paw Soft</h1>
+            <p className="text-sm text-muted-foreground">ระบบจัดการคลินิกสัตว์</p>
+          </div>
+        </div>
+
+        <Suspense fallback={null}>
+          <LoginForm />
+        </Suspense>
+      </div>
     </main>
   )
 }
