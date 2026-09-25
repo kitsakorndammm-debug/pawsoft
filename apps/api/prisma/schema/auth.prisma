@@ -335,6 +335,12 @@ enum LoginResultKind {
   FAILED_LOCKED
   LOGOUT
 
+  /// **ยังไม่มีโค้ดฝั่ง `main` เขียนค่านี้** — เหลือจากงาน OTP/2FA ที่พักไว้บน branch
+  /// `otp-pending` (ยังไม่ merge) เก็บไว้ในสคีมาแทนการลบ เพื่อไม่ต้องแก้ enum ที่ฐาน
+  /// จริงสองรอบเมื่อ merge งานนั้นในอนาคต — ไม่กระทบอะไรตอนนี้เพราะไม่มีแถวไหนใช้ค่านี้
+  OTP_SENT
+  FAILED_OTP
+
   @@map("login_result_kind")
 }
 

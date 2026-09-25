@@ -48,6 +48,7 @@ const toWire = (row: DrugStockBalance) => ({
   isActive: row.isActive,
   quantity: row.quantity.toString(),
   nearestExpiry: dateOnlyWire(row.nearestExpiry),
+  lowStockThreshold: row.lowStockThreshold,
 })
 
 const movementToWire = (row: DrugStockMovement) => ({

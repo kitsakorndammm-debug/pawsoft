@@ -10,7 +10,7 @@ import { PageHint } from '@/components/common/page-hint'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useCan } from '@/features/auth/hooks'
-import type { DrugStockBalance } from '@/features/drug-stock/api'
+import { DEFAULT_LOW_STOCK_THRESHOLD, type DrugStockBalance } from '@/features/drug-stock/api'
 import { useDrugStockBalances } from '@/features/drug-stock/hooks'
 import { toErrorMessage } from '@/lib/api-client'
 import { formatDate } from '@/lib/format'
@@ -68,11 +68,18 @@ function DrugStockList() {
       title: 'คงเหลือ',
       width: 120,
       align: 'right',
-      render: (row) => (
-        <span className={Number(row.quantity) <= 0 ? 'text-destructive' : undefined}>
-          {row.quantity}
-        </span>
-      ),
+      render: (row) => {
+        const quantity = Number(row.quantity)
+        const threshold = row.lowStockThreshold ?? DEFAULT_LOW_STOCK_THRESHOLD
+        const className =
+          quantity <= 0
+            ? 'text-destructive font-medium'
+            : quantity <= threshold
+              ? 'text-amber-600 font-medium'
+              : undefined
+
+        return <span className={className}>{row.quantity}</span>
+      },
     },
     {
       key: 'nearestExpiry',

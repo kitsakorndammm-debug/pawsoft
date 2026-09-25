@@ -15,6 +15,7 @@ import {
 
 const LIST_ROOT = ['warehouse-stock', 'list'] as const
 const MOVEMENTS_ROOT = ['warehouse-stock', 'movements'] as const
+const LOTS_ROOT = ['warehouse-stock', 'lots'] as const
 
 export function useWarehouseStockBalances(
   q: string,
@@ -39,6 +40,18 @@ export function useWarehouseStockMovements(drugId: number | null) {
   })
 }
 
+/**
+ * ล็อตที่ยังเหลือของยาตัวเดียว — ใช้เลือกตอน "เบิกจากคลัง" `drugId` เป็น `null`
+ * เมื่อยังไม่ได้เลือกยา (เปิดกล่องแล้วแต่ยังไม่ได้เลือกจาก combobox)
+ */
+export function useWarehouseStockLots(drugId: number | null) {
+  return useQuery({
+    queryKey: [...LOTS_ROOT, drugId],
+    queryFn: () => warehouseStockApi.lots(drugId!),
+    enabled: drugId !== null,
+  })
+}
+
 export function useCreateWarehouseStockMovement() {
   const queryClient = useQueryClient()
 
@@ -47,6 +60,8 @@ export function useCreateWarehouseStockMovement() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: LIST_ROOT })
       void queryClient.invalidateQueries({ queryKey: MOVEMENTS_ROOT })
+      // ซื้อเข้า (RECEIVE) สร้างล็อตใหม่ — ต้องเห็นในตัวเลือกล็อตตอนเบิกทันที
+      void queryClient.invalidateQueries({ queryKey: LOTS_ROOT })
     },
   })
 }
@@ -65,6 +80,7 @@ export function useWithdrawFromWarehouse() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: LIST_ROOT })
       void queryClient.invalidateQueries({ queryKey: MOVEMENTS_ROOT })
+      void queryClient.invalidateQueries({ queryKey: LOTS_ROOT })
       void queryClient.invalidateQueries({ queryKey: DRUG_STOCK_LIST_ROOT })
       void queryClient.invalidateQueries({ queryKey: DRUG_STOCK_MOVEMENTS_ROOT })
     },

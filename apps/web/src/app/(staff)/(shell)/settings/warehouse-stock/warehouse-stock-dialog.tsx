@@ -2,6 +2,7 @@
 
 import { z } from 'zod'
 
+import { AppDatePicker } from '@/components/common/app-date-picker'
 import { AppFormField } from '@/components/common/app-form-field'
 import { ComboboxField } from '@/components/common/combobox-field'
 import { FormDialog } from '@/components/common/form-dialog'
@@ -27,6 +28,9 @@ const schema = z
       .regex(QUANTITY_PATTERN, 'จำนวนต้องเป็นตัวเลข ทศนิยมไม่เกินสองตำแหน่ง')
       .refine((v) => Number(v) !== 0, 'จำนวนต้องไม่เป็นศูนย์'),
     reason: z.string().trim().max(REASON_MAX, `ยาวเกิน ${REASON_MAX} ตัวอักษร`).optional(),
+    // ไม่บังคับกรอก — มีความหมายเฉพาะตอนซื้อเข้า (ดูฝั่ง BE ก่อนใส่ฟิลด์ใหม่)
+    expiresOn: z.string().trim().optional(),
+    receivedOn: z.string().trim().optional(),
   })
   // ซื้อเข้าต้องเป็นบวก — ตรงกับที่ BE ปฏิเสธ ให้กรอบแดงขึ้นก่อนยิง API
   .refine((data) => data.type !== 'RECEIVE' || Number(data.quantity) > 0, {
@@ -60,6 +64,8 @@ export function WarehouseStockDialog({
       type: values.type,
       quantity: values.quantity,
       reason: values.reason?.trim() || null,
+      expiresOn: values.expiresOn?.trim() || null,
+      receivedOn: values.receivedOn?.trim() || null,
     })
 
     // ชื่อยาเอาจากตัวเลือกที่โหลดไว้ — response ของ BE คืนแค่ `drugId` ไม่มีชื่อ
@@ -82,6 +88,8 @@ export function WarehouseStockDialog({
         type: 'RECEIVE',
         quantity: '',
         reason: '',
+        expiresOn: '',
+        receivedOn: '',
       }}
       onSubmit={handleSubmit}
       formKey="new"
@@ -126,6 +134,27 @@ export function WarehouseStockDialog({
             <p className="-mt-2 text-xs text-muted-foreground">
               ใส่จำนวนติดลบถ้าต้องการลดคลัง เช่น -5
             </p>
+          )}
+
+          {form.watch('type') === 'RECEIVE' && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <AppFormField name="receivedOn" label="วันที่ซื้อเข้า">
+                <AppDatePicker
+                  value={form.watch('receivedOn') as string | null}
+                  onChange={(v) => form.setValue('receivedOn', v ?? '')}
+                  disabled={pending}
+                  aria-label="วันที่ซื้อเข้า"
+                />
+              </AppFormField>
+              <AppFormField name="expiresOn" label="วันหมดอายุ">
+                <AppDatePicker
+                  value={form.watch('expiresOn') as string | null}
+                  onChange={(v) => form.setValue('expiresOn', v ?? '')}
+                  disabled={pending}
+                  aria-label="วันหมดอายุ"
+                />
+              </AppFormField>
+            </div>
           )}
 
           <AppFormField name="reason" label="เหตุผล" required={form.watch('type') === 'ADJUST'}>

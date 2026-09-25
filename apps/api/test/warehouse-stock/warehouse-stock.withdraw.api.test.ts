@@ -96,6 +96,37 @@ describe('POST /api/warehouse-stock/withdraw', () => {
     expect(row.nearestExpiry).toBe('2027-06-30')
   })
 
+  test('เบิกโดยเลือกล็อต → วันหมดอายุมาจากล็อต', async () => {
+    const drug = await makeDrug('LOT')
+    const lot = await createWarehouseStockMovement(
+      { drugId: drug.id, type: 'RECEIVE', quantity: '20', expiresOn: '2027-09-01' },
+      SYSTEM_USER_ID,
+    )
+
+    await post({ drugId: Number(drug.id), quantity: '5', lotId: Number(lot.id) })
+
+    const stockRes = await getDrugStock(`?q=${encodeURIComponent(`${NAME_PREFIX}LOT`)}`)
+    const stockBody = await readJson(stockRes)
+    const row = stockBody.data.find((r: { id: number }) => r.id === Number(drug.id))
+
+    expect(row.nearestExpiry).toBe('2027-09-01')
+  })
+
+  test('เบิกเกินยอดคงเหลือของล็อตที่เลือก → 400 INVALID', async () => {
+    const drug = await makeDrug('LOT-OVER')
+    const lot = await createWarehouseStockMovement(
+      { drugId: drug.id, type: 'RECEIVE', quantity: '5' },
+      SYSTEM_USER_ID,
+    )
+    await createWarehouseStockMovement({ drugId: drug.id, type: 'RECEIVE', quantity: '50' }, SYSTEM_USER_ID)
+
+    const res = await post({ drugId: Number(drug.id), quantity: '8', lotId: Number(lot.id) })
+    const body = await readJson(res)
+
+    expect(res.status).toBe(400)
+    expect(body.error?.code).toBe('INVALID')
+  })
+
   test('เบิกเกินยอดคงเหลือในคลัง → 400 INVALID', async () => {
     const drug = await makeDrug('OVER')
     await createWarehouseStockMovement(

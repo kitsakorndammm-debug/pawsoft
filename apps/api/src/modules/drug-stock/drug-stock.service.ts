@@ -24,6 +24,8 @@ export type DrugStockBalance = {
   quantity: Prisma.Decimal
   /** วันหมดอายุที่ใกล้ที่สุดในบรรดาล็อตที่เคยรับเข้า — `null` ถ้าไม่เคยระบุไว้เลย */
   nearestExpiry: Date | null
+  /** เกณฑ์แจ้งเตือนสต็อกต่ำของยาตัวนี้ — `null` = ใช้ค่ากลางของคลินิก */
+  lowStockThreshold: number | null
 }
 
 export type ListDrugStockBalancesInput = { q?: string | undefined }
@@ -48,7 +50,7 @@ export async function listDrugStockBalances(
       ...(q ? { name: { contains: literal(q) } } : {}),
     },
     orderBy: [{ name: 'asc' }, { id: 'asc' }],
-    select: { id: true, name: true, code: true, unit: true, isActive: true },
+    select: { id: true, name: true, code: true, unit: true, isActive: true, lowStockThreshold: true },
   })
 
   if (drugs.length === 0) return []
@@ -78,6 +80,7 @@ export async function listDrugStockBalances(
       isActive: d.isActive,
       quantity: balanceByDrugId.get(d.id) ?? new Prisma.Decimal(0),
       nearestExpiry: expiryByDrugId.get(d.id) ?? null,
+      lowStockThreshold: d.lowStockThreshold,
     }))
     .filter((d) => d.isActive || !d.quantity.isZero())
 }

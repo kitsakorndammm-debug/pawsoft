@@ -52,6 +52,34 @@ describe('คลังยา · บันทึกซื้อเข้า/ป�
     expect(created.drugId).toBe(drug.id)
   })
 
+  test('ซื้อเข้าพร้อมวันหมดอายุและวันที่ซื้อเข้า → บันทึกทั้งสองวันไว้ (ล็อตนี้)', async () => {
+    const drug = await makeDrug('RECEIVE-LOT-DATES')
+
+    const created = await createWarehouseStockMovement(
+      { drugId: drug.id, type: 'RECEIVE', quantity: '30', expiresOn: '2027-01-15', receivedOn: '2026-09-20' },
+      SYSTEM_USER_ID,
+    )
+
+    expect(created.expiresOn?.toISOString().slice(0, 10)).toBe('2027-01-15')
+    expect(created.receivedOn?.toISOString().slice(0, 10)).toBe('2026-09-20')
+  })
+
+  test('ปรับยอดใส่วันหมดอายุมาด้วย → ปฏิเสธ (มีความหมายเฉพาะตอนซื้อเข้า)', async () => {
+    const drug = await makeDrug('ADJUST-EXPIRES-BLOCKED')
+    await createWarehouseStockMovement({ drugId: drug.id, type: 'RECEIVE', quantity: '20' }, SYSTEM_USER_ID)
+    expect.assertions(2)
+
+    try {
+      await createWarehouseStockMovement(
+        { drugId: drug.id, type: 'ADJUST', quantity: '-3', reason: 'ทดสอบ', expiresOn: '2027-01-01' },
+        SYSTEM_USER_ID,
+      )
+    } catch (e) {
+      expect(isAppError(e)).toBe(true)
+      expect(isAppError(e) && e.code).toBe('INVALID')
+    }
+  })
+
   test('ปรับยอดพร้อมเหตุผล → บันทึกได้', async () => {
     const drug = await makeDrug('ADJUST-OK')
     await createWarehouseStockMovement({ drugId: drug.id, type: 'RECEIVE', quantity: '20' }, SYSTEM_USER_ID)

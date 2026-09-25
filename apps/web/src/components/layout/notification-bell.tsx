@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { SLOT_LABEL, type AppointmentRow } from '@/features/appointment/api'
 import { useAppointments, useConfirmAppointment } from '@/features/appointment/hooks'
 import { useCan } from '@/features/auth/hooks'
-import { type DrugStockBalance } from '@/features/drug-stock/api'
+import { DEFAULT_LOW_STOCK_THRESHOLD, type DrugStockBalance } from '@/features/drug-stock/api'
 import { useDrugStockBalances } from '@/features/drug-stock/hooks'
 import { type Invoice } from '@/features/payment/api'
 import { useInvoices, useVerifyInvoice } from '@/features/payment/hooks'
@@ -21,9 +21,6 @@ import { BILLING_VERIFY, DRUG_STOCK_READ, MEDICAL_WRITE, RECEPTION_WRITE } from 
 import { ROUTE_APPOINTMENTS, ROUTE_BILLING, ROUTE_DRUG_STOCK, ROUTE_QUEUE } from '@/lib/routes'
 
 const POLL_MS = 20_000
-
-/** เตือนที่กระดิ่งเมื่อยอดยาเหลือเท่านี้หรือน้อยกว่า */
-const LOW_STOCK_THRESHOLD = 5
 
 /**
  * กระดิ่งแจ้งเตือน — อยู่ข้าง ๆ ปุ่มออกจากระบบ (ผู้ใช้ตัดสิน 2026-09-09)
@@ -102,11 +99,15 @@ function NotificationBellContent({
     : []
 
   /**
-   * ยาที่เหลือน้อย (≤ `LOW_STOCK_THRESHOLD`) หรือหมด/ติดลบ — สัญญาณให้ไปเบิกจากคลังก่อนหมดจริง
-   * (ผู้ใช้ตัดสิน 2026-09-20: เตือนตอนเหลือ 5 ดีกว่ารอให้หมด · ยังไม่ห้ามจ่าย ไม่ให้สกัดงานหมอ)
+   * ยาที่เหลือน้อย (≤ เกณฑ์ของตัวเอง หรือ ≤ ค่ากลางของคลินิกถ้าไม่ได้ตั้งเอง) หรือหมด/ติดลบ —
+   * สัญญาณให้ไปเบิกจากคลังก่อนหมดจริง (ผู้ใช้ตัดสิน 2026-09-20: เตือนตอนเหลือ 5 ดีกว่ารอให้หมด ·
+   * ยาบางตัวใช้เร็วบางตัวใช้ช้าจึงตั้งเกณฑ์แยกต่อตัวได้ — ผู้ใช้ตัดสิน 2026-09-23 ·
+   * ยังไม่ห้ามจ่าย ไม่ให้สกัดงานหมอ)
    */
   const lowStockRows = canSeeStock
-    ? (stock.data ?? []).filter((d) => Number(d.quantity) <= LOW_STOCK_THRESHOLD)
+    ? (stock.data ?? []).filter(
+        (d) => Number(d.quantity) <= (d.lowStockThreshold ?? DEFAULT_LOW_STOCK_THRESHOLD),
+      )
     : []
 
   const totalCount = appointmentCount + invoiceCount + emergencyRows.length + lowStockRows.length

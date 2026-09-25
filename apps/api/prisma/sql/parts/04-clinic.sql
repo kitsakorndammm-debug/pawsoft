@@ -88,6 +88,14 @@ ALTER TABLE drug DROP CONSTRAINT IF EXISTS drug_price_needs_unit_check;
 ALTER TABLE drug ADD CONSTRAINT drug_price_needs_unit_check
   CHECK (price IS NULL OR btrim(coalesce(unit, '')) <> '');
 
+COMMENT ON COLUMN drug.low_stock_threshold IS
+  'เกณฑ์แจ้งเตือนสต็อกต่ำของยาตัวนี้ null คือใช้ค่ากลางของคลินิก';
+
+-- ติดลบไม่มีความหมาย · ศูนย์มี (เตือนเฉพาะตอนหมดเป๊ะ)
+ALTER TABLE drug DROP CONSTRAINT IF EXISTS drug_low_stock_threshold_check;
+ALTER TABLE drug ADD CONSTRAINT drug_low_stock_threshold_check
+  CHECK (low_stock_threshold IS NULL OR low_stock_threshold >= 0);
+
 -- ============================================================================
 -- service_item
 -- ============================================================================
@@ -148,6 +156,9 @@ COMMENT ON TABLE warehouse_stock_movement IS
   'ประวัติคลังยา — สต็อกกลางที่แยกจากสต็อกที่หมอใช้จ่ายคนไข้ log ที่ไม่แก้ไม่ลบ จำนวนคงเหลือคือผลรวม quantity ต่อยาแต่ละตัว';
 COMMENT ON COLUMN warehouse_stock_movement.quantity IS 'มีเครื่องหมาย บวกคือเพิ่มคลัง ลบคือลดคลัง';
 COMMENT ON COLUMN warehouse_stock_movement.reason IS 'บังคับกรอกเฉพาะตอนปรับยอด (type = ADJUST)';
+COMMENT ON COLUMN warehouse_stock_movement.expires_on IS 'วันหมดอายุของล็อต ใส่ได้เฉพาะตอนซื้อเข้า (type = RECEIVE)';
+COMMENT ON COLUMN warehouse_stock_movement.received_on IS 'วันที่ซื้อเข้าจริง กรอกเองย้อนหลังได้ ใส่ได้เฉพาะตอน type = RECEIVE';
+COMMENT ON COLUMN warehouse_stock_movement.lot_id IS 'ล็อต RECEIVE ต้นทางที่เบิกมา ใส่ได้เฉพาะตอน type = WITHDRAW';
 
 -- ไม่มีค่า 0 — ไม่มีเหตุผลจะบันทึกรายการที่ไม่เปลี่ยนอะไรเลย
 ALTER TABLE warehouse_stock_movement DROP CONSTRAINT IF EXISTS warehouse_stock_movement_quantity_check;
@@ -158,3 +169,17 @@ ALTER TABLE warehouse_stock_movement ADD CONSTRAINT warehouse_stock_movement_qua
 ALTER TABLE warehouse_stock_movement DROP CONSTRAINT IF EXISTS warehouse_stock_movement_reason_check;
 ALTER TABLE warehouse_stock_movement ADD CONSTRAINT warehouse_stock_movement_reason_check
   CHECK (type <> 'ADJUST' OR btrim(coalesce(reason, '')) <> '');
+
+-- วันหมดอายุ/วันซื้อเข้ามีความหมายเฉพาะตอนซื้อเข้า — ประเภทอื่นห้ามมีค่านี้ติดมา
+ALTER TABLE warehouse_stock_movement DROP CONSTRAINT IF EXISTS warehouse_stock_movement_expires_on_check;
+ALTER TABLE warehouse_stock_movement ADD CONSTRAINT warehouse_stock_movement_expires_on_check
+  CHECK (expires_on IS NULL OR type = 'RECEIVE');
+
+ALTER TABLE warehouse_stock_movement DROP CONSTRAINT IF EXISTS warehouse_stock_movement_received_on_check;
+ALTER TABLE warehouse_stock_movement ADD CONSTRAINT warehouse_stock_movement_received_on_check
+  CHECK (received_on IS NULL OR type = 'RECEIVE');
+
+-- ล็อตต้นทางมีความหมายเฉพาะตอนเบิกออก — ประเภทอื่นห้ามมีค่านี้ติดมา
+ALTER TABLE warehouse_stock_movement DROP CONSTRAINT IF EXISTS warehouse_stock_movement_lot_id_check;
+ALTER TABLE warehouse_stock_movement ADD CONSTRAINT warehouse_stock_movement_lot_id_check
+  CHECK (lot_id IS NULL OR type = 'WITHDRAW');

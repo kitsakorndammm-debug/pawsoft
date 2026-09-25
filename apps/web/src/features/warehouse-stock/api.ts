@@ -31,13 +31,22 @@ export type CreateWarehouseStockMovementInput = {
   type: WarehouseStockMovementType
   quantity: string
   reason: string | null
+  /** ใส่ได้เฉพาะตอน `type = 'RECEIVE'` — ล็อตนี้หมดอายุวันไหน */
+  expiresOn?: string | null
+  /** ใส่ได้เฉพาะตอน `type = 'RECEIVE'` — ซื้อเข้าจริงวันไหน กรอกย้อนหลังได้ */
+  receivedOn?: string | null
 }
 
 export type WithdrawFromWarehouseInput = {
   drugId: number
   quantity: string
   reason: string | null
-  /** วันหมดอายุของล็อตที่เบิกมา — ส่งต่อไปเป็นวันหมดอายุของแถวที่หมอใช้ */
+  /**
+   * ล็อตที่เลือกเบิก — ไม่บังคับ (ยาที่ไม่เคยมีล็อตให้เลือกก็เบิกได้ ไม่มีวันหมดอายุติดไปด้วย)
+   * เลือกแล้ววันหมดอายุมาจากล็อตนั้นเสมอ ไม่ใช่จาก `expiresOn` ที่ส่งมา
+   */
+  lotId?: number | null
+  /** ใช้เฉพาะตอนไม่ได้เลือกล็อต */
   expiresOn: string | null
 }
 
@@ -47,6 +56,9 @@ export type WarehouseStockMovement = {
   type: string
   quantity: string
   reason: string | null
+  expiresOn: string | null
+  receivedOn: string | null
+  lotId: number | null
   createdAt: string
 }
 
@@ -65,8 +77,21 @@ export type WarehouseStockMovementRow = {
   type: WarehouseStockMovementRowType
   quantity: string
   reason: string | null
+  expiresOn: string | null
+  receivedOn: string | null
+  lotId: number | null
   createdAt: string
   createdByName: string
+}
+
+/** หนึ่งล็อตที่ยังเหลือ — ใช้เลือกตอน "เบิกจากคลัง" เรียงใกล้หมดอายุก่อนมาจาก BE แล้ว */
+export type WarehouseStockLot = {
+  id: number
+  /** จำนวนที่ซื้อเข้าตอนสร้างล็อตนี้ — เอาไว้โชว์เทียบกับ `remaining` */
+  quantityReceived: string
+  remaining: string
+  expiresOn: string | null
+  receivedOn: string | null
 }
 
 export const warehouseStockApi = {
@@ -85,4 +110,7 @@ export const warehouseStockApi = {
   // ไม่แบ่งหน้า — ประวัติของยาตัวเดียว (โครงเดียวกับ `drug-stock`)
   movements: (drugId: number) =>
     api.get<WarehouseStockMovementRow[]>(`/api/warehouse-stock/${drugId}/movements`),
+
+  // ไม่แบ่งหน้า — ล็อตที่ยังเหลือของยาตัวเดียว เรียงใกล้หมดอายุก่อน
+  lots: (drugId: number) => api.get<WarehouseStockLot[]>(`/api/warehouse-stock/${drugId}/lots`),
 }

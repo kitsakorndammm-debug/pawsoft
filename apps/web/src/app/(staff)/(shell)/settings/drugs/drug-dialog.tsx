@@ -37,6 +37,8 @@ const schema = z
       .union([z.string().regex(/^\d+(\.\d{1,2})?$/, 'ราคาต้องเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง'), z.literal('')])
       .nullish(),
     categoryId: z.number().nullable(),
+    // จำนวนเต็มไม่ติดลบ — `NumberInput mode="integer"` กันรูปผิดตั้งแต่พิมพ์อยู่แล้ว
+    lowStockThreshold: z.string().trim(),
     note: z.string().trim().max(TEXT_MAX).nullish(),
   })
   /**
@@ -83,6 +85,7 @@ export function DrugDialog({
       packageSize: values.packageSize || null,
       price: values.price || null,
       categoryId: values.categoryId,
+      lowStockThreshold: values.lowStockThreshold === '' ? null : Number(values.lowStockThreshold),
       note: values.note || null,
     }
 
@@ -117,6 +120,7 @@ export function DrugDialog({
         packageSize: row?.packageSize ?? '',
         price: row?.price ?? '',
         categoryId: row?.categoryId ?? null,
+        lowStockThreshold: row?.lowStockThreshold != null ? String(row.lowStockThreshold) : '',
         note: row?.note ?? '',
       }}
       onSubmit={handleSubmit}
@@ -170,6 +174,19 @@ export function DrugDialog({
               <Input {...form.register('packageSize')} disabled={pending} readOnly={readOnly} />
             </AppFormField>
           </div>
+
+          <AppFormField name="lowStockThreshold" label="เกณฑ์แจ้งเตือนสต็อกต่ำ">
+            <NumberInput
+              mode="integer"
+              value={form.watch('lowStockThreshold') as string}
+              onChange={(v) => form.setValue('lowStockThreshold', v)}
+              disabled={pending}
+              readOnly={readOnly}
+              aria-label="เกณฑ์แจ้งเตือนสต็อกต่ำ"
+            />
+          </AppFormField>
+          {/* ว่าง = ใช้ค่ากลางของคลินิก — ไม่บังคับกรอก */}
+          <p className="-mt-2 text-xs text-muted-foreground">ไม่กรอก = ใช้ค่ากลางของคลินิก (เหลือ 5 หรือน้อยกว่า)</p>
 
           <AppFormField name="note" label="บันทึก">
             <Textarea {...form.register('note')} disabled={pending} readOnly={readOnly} rows={2} />

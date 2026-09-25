@@ -17,6 +17,8 @@ export type Drug = {
   packageSize: string | null
   price: string | null
   categoryId: number | null
+  /** เกณฑ์แจ้งเตือนสต็อกต่ำของยาตัวนี้ — `null` = ใช้ค่ากลางของคลินิก */
+  lowStockThreshold: number | null
   isActive: boolean
   note: string | null
 }
@@ -30,6 +32,7 @@ export type DrugInput = {
   packageSize: string | null
   price: string | null
   categoryId: number | null
+  lowStockThreshold: number | null
   note: string | null
 }
 

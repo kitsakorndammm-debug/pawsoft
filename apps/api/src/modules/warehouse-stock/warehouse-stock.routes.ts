@@ -12,9 +12,11 @@ import {
 import {
   createWarehouseStockMovement,
   listWarehouseStockBalances,
+  listWarehouseStockLots,
   listWarehouseStockMovements,
   withdrawFromWarehouse,
   type WarehouseStockBalance,
+  type WarehouseStockLot,
   type WarehouseStockMovementRow,
 } from './warehouse-stock.service.ts'
 import type { WarehouseStockMovement } from '../../../prisma/generated/client.ts'
@@ -30,8 +32,11 @@ import type { WarehouseStockMovement } from '../../../prisma/generated/client.ts
  */
 
 const LIST_QUERY_KEYS = new Set(['q'])
-const WRITE_FIELDS = new Set(['drugId', 'type', 'quantity', 'reason'])
-const WITHDRAW_FIELDS = new Set(['drugId', 'quantity', 'reason', 'expiresOn'])
+const WRITE_FIELDS = new Set(['drugId', 'type', 'quantity', 'reason', 'expiresOn', 'receivedOn'])
+const WITHDRAW_FIELDS = new Set(['drugId', 'quantity', 'reason', 'lotId', 'expiresOn'])
+
+/** วันที่-only ออกเป็น `YYYY-MM-DD` ไม่ใช่ ISO timestamp เต็ม — เหตุผลเดียวกับ `drug-stock.routes.ts` */
+const dateOnlyWire = (d: Date | null) => (d === null ? null : d.toISOString().slice(0, 10))
 
 /** BigInt ออกเป็น `number` · จำนวนออกเป็น `string` — เหตุผลเดียวกับ `drug-stock.routes.ts` */
 const toWire = (row: WarehouseStockBalance) => ({
@@ -49,6 +54,9 @@ const movementToWire = (row: WarehouseStockMovement) => ({
   type: row.type,
   quantity: row.quantity.toString(),
   reason: row.reason,
+  expiresOn: dateOnlyWire(row.expiresOn),
+  receivedOn: dateOnlyWire(row.receivedOn),
+  lotId: row.lotId === null ? null : Number(row.lotId),
   createdAt: row.createdAt.toISOString(),
 })
 
@@ -57,8 +65,19 @@ const movementRowToWire = (row: WarehouseStockMovementRow) => ({
   type: row.type,
   quantity: row.quantity.toString(),
   reason: row.reason,
+  expiresOn: dateOnlyWire(row.expiresOn),
+  receivedOn: dateOnlyWire(row.receivedOn),
+  lotId: row.lotId === null ? null : Number(row.lotId),
   createdAt: row.createdAt.toISOString(),
   createdByName: row.createdByName,
+})
+
+const lotToWire = (row: WarehouseStockLot) => ({
+  id: Number(row.id),
+  quantityReceived: row.quantityReceived.toString(),
+  remaining: row.remaining.toString(),
+  expiresOn: dateOnlyWire(row.expiresOn),
+  receivedOn: dateOnlyWire(row.receivedOn),
 })
 
 const createSchema = t.Object(
@@ -67,6 +86,9 @@ const createSchema = t.Object(
     type: t.Union([t.Literal('RECEIVE'), t.Literal('ADJUST')]),
     quantity: t.String(),
     reason: t.Optional(t.Union([t.String(), t.Null()])),
+    /** ใส่ได้เฉพาะตอน `type = RECEIVE` — service ปฏิเสธถ้าใส่มาตอน `ADJUST` */
+    expiresOn: t.Optional(t.Union([t.String(), t.Null()])),
+    receivedOn: t.Optional(t.Union([t.String(), t.Null()])),
   },
   { additionalProperties: false },
 )
@@ -76,6 +98,9 @@ const withdrawSchema = t.Object(
     drugId: t.Number(),
     quantity: t.String(),
     reason: t.Optional(t.Union([t.String(), t.Null()])),
+    /** เลือกล็อตที่จะเบิก — ไม่บังคับ ดู `///` บน `WithdrawFromWarehouseInput` */
+    lotId: t.Optional(t.Union([t.Number(), t.Null()])),
+    /** ใช้เฉพาะตอนไม่ได้เลือกล็อต — เลือกล็อตแล้ววันหมดอายุมาจากล็อตเสมอ */
     expiresOn: t.Optional(t.Union([t.String(), t.Null()])),
   },
   { additionalProperties: false },
@@ -112,6 +137,20 @@ export const warehouseStockRoutes = new Elysia({ prefix: '/api/warehouse-stock' 
     },
   )
 
+  /** ล็อตที่ยังเหลือของยาตัวเดียว — เรียงใกล้หมดอายุก่อน ใช้เลือกตอน "เบิกจากคลัง" */
+  .get(
+    '/:drugId/lots',
+    async ({ params }) => {
+      const rows = await listWarehouseStockLots(parseId(params.drugId))
+
+      return ok(rows.map(lotToWire))
+    },
+    {
+      beforeHandle: guardDrugWarehouseRead,
+      detail: { tags: ['คลังยา'], summary: 'ดูล็อตที่ยังเหลือของยาตัวเดียว' },
+    },
+  )
+
   .post(
     '/',
     async ({ body, set, ...ctx }) => {
@@ -124,6 +163,8 @@ export const warehouseStockRoutes = new Elysia({ prefix: '/api/warehouse-stock' 
           type: body.type,
           quantity: body.quantity,
           reason: body.reason ?? null,
+          expiresOn: body.expiresOn ?? null,
+          receivedOn: body.receivedOn ?? null,
         },
         actor.userId,
       )
@@ -148,6 +189,7 @@ export const warehouseStockRoutes = new Elysia({ prefix: '/api/warehouse-stock' 
           drugId: BigInt(body.drugId),
           quantity: body.quantity,
           reason: body.reason ?? null,
+          lotId: body.lotId === null || body.lotId === undefined ? null : BigInt(body.lotId),
           expiresOn: body.expiresOn ?? null,
         },
         actor.userId,

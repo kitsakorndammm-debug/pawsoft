@@ -72,6 +72,104 @@ describe('คลังยา · เบิกไปเป็นสต็อกท
     expect(row?.nearestExpiry?.toISOString().slice(0, 10)).toBe('2027-06-30')
   })
 
+  test('เบิกโดยเลือกล็อต → วันหมดอายุมาจากล็อต ไม่ใช่จากที่พิมพ์เอง', async () => {
+    const drug = await makeDrug('LOT-PICK')
+    const lot = await createWarehouseStockMovement(
+      { drugId: drug.id, type: 'RECEIVE', quantity: '20', expiresOn: '2027-03-01' },
+      SYSTEM_USER_ID,
+    )
+
+    // ส่ง expiresOn มาด้วยแต่ต้องโดนเมินเพราะเลือกล็อตแล้ว
+    await withdrawFromWarehouse(
+      { drugId: drug.id, quantity: '5', lotId: lot.id, expiresOn: '1999-01-01' },
+      SYSTEM_USER_ID,
+    )
+
+    const drugStockRows = await listDrugStockBalances({ q: 'LOT-PICK' })
+    const row = drugStockRows.find((r) => r.drugId === drug.id)
+
+    expect(row?.nearestExpiry?.toISOString().slice(0, 10)).toBe('2027-03-01')
+  })
+
+  test('เบิกเกินยอดคงเหลือของล็อตที่เลือก แม้คลังรวมยังพอ → ปฏิเสธ', async () => {
+    const drug = await makeDrug('LOT-OVER')
+    const smallLot = await createWarehouseStockMovement(
+      { drugId: drug.id, type: 'RECEIVE', quantity: '5', expiresOn: '2027-01-01' },
+      SYSTEM_USER_ID,
+    )
+    // ล็อตที่สอง — ทำให้ยอดรวมคลังพอ (15) แต่ล็อตแรกที่เลือกมีแค่ 5
+    await createWarehouseStockMovement(
+      { drugId: drug.id, type: 'RECEIVE', quantity: '10', expiresOn: '2027-06-01' },
+      SYSTEM_USER_ID,
+    )
+    expect.assertions(2)
+
+    try {
+      await withdrawFromWarehouse(
+        { drugId: drug.id, quantity: '8', lotId: smallLot.id },
+        SYSTEM_USER_ID,
+      )
+    } catch (e) {
+      expect(isAppError(e)).toBe(true)
+      expect(isAppError(e) && e.code).toBe('INVALID')
+    }
+  })
+
+  test('เบิกจากล็อตเดิมสองครั้งจนหมด → ครั้งที่สามเกินยอดคงเหลือของล็อต → ปฏิเสธ', async () => {
+    const drug = await makeDrug('LOT-DEPLETE')
+    const lot = await createWarehouseStockMovement(
+      { drugId: drug.id, type: 'RECEIVE', quantity: '10' },
+      SYSTEM_USER_ID,
+    )
+
+    await withdrawFromWarehouse({ drugId: drug.id, quantity: '6', lotId: lot.id }, SYSTEM_USER_ID)
+    expect.assertions(2)
+
+    try {
+      await withdrawFromWarehouse({ drugId: drug.id, quantity: '5', lotId: lot.id }, SYSTEM_USER_ID)
+    } catch (e) {
+      expect(isAppError(e)).toBe(true)
+      expect(isAppError(e) && e.code).toBe('INVALID')
+    }
+  })
+
+  test('ล็อตที่เลือกไม่มีอยู่จริง → ปฏิเสธ', async () => {
+    const drug = await makeDrug('LOT-NOT-FOUND')
+    await createWarehouseStockMovement({ drugId: drug.id, type: 'RECEIVE', quantity: '10' }, SYSTEM_USER_ID)
+    expect.assertions(2)
+
+    try {
+      await withdrawFromWarehouse(
+        { drugId: drug.id, quantity: '1', lotId: 999_999_999n },
+        SYSTEM_USER_ID,
+      )
+    } catch (e) {
+      expect(isAppError(e)).toBe(true)
+      expect(isAppError(e) && e.code).toBe('NOT_FOUND')
+    }
+  })
+
+  test('ล็อตที่เลือกเป็นของยาตัวอื่น → ปฏิเสธ', async () => {
+    const drug = await makeDrug('LOT-WRONG-DRUG')
+    const otherDrug = await makeDrug('LOT-WRONG-DRUG-OTHER')
+    const otherLot = await createWarehouseStockMovement(
+      { drugId: otherDrug.id, type: 'RECEIVE', quantity: '10' },
+      SYSTEM_USER_ID,
+    )
+    await createWarehouseStockMovement({ drugId: drug.id, type: 'RECEIVE', quantity: '10' }, SYSTEM_USER_ID)
+    expect.assertions(2)
+
+    try {
+      await withdrawFromWarehouse(
+        { drugId: drug.id, quantity: '1', lotId: otherLot.id },
+        SYSTEM_USER_ID,
+      )
+    } catch (e) {
+      expect(isAppError(e)).toBe(true)
+      expect(isAppError(e) && e.code).toBe('NOT_FOUND')
+    }
+  })
+
   test('เบิกเกินยอดคงเหลือในคลัง → ปฏิเสธ ไม่มีอะไรถูกสร้างเลยทั้งสองฝั่ง', async () => {
     const drug = await makeDrug('OVER')
     await createWarehouseStockMovement({ drugId: drug.id, type: 'RECEIVE', quantity: '5' }, SYSTEM_USER_ID)

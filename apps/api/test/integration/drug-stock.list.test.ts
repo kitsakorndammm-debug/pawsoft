@@ -13,11 +13,15 @@ import { listDrugStockBalances } from '../../src/modules/drug-stock/drug-stock.s
 
 const NAME_PREFIX = 'TEST-STOCK-LIST-'
 
-async function makeDrug(suffix: string, opts: { isActive?: boolean; deleted?: boolean } = {}) {
+async function makeDrug(
+  suffix: string,
+  opts: { isActive?: boolean; deleted?: boolean; lowStockThreshold?: number } = {},
+) {
   const drug = await db.drug.create({
     data: {
       name: `${NAME_PREFIX}${suffix}`,
       isActive: opts.isActive ?? true,
+      lowStockThreshold: opts.lowStockThreshold ?? null,
       createdBy: SYSTEM_USER_ID,
       updatedBy: SYSTEM_USER_ID,
       ...(opts.deleted
@@ -130,6 +134,24 @@ describe('สต็อกยา · ดูยอดคงเหลือ', () => 
     const row = rows.find((r) => r.drugId === drug.id)
 
     expect(row?.nearestExpiry).toBeNull()
+  })
+
+  test('มีเกณฑ์แจ้งเตือนสต็อกต่ำของตัวเอง → พกมาด้วย', async () => {
+    const drug = await makeDrug('THRESHOLD', { lowStockThreshold: 15 })
+
+    const rows = await listDrugStockBalances({ q: 'THRESHOLD' })
+    const row = rows.find((r) => r.drugId === drug.id)
+
+    expect(row?.lowStockThreshold).toBe(15)
+  })
+
+  test('ไม่มีเกณฑ์ของตัวเอง → เป็น null (ให้หน้าจอใช้ค่ากลางของคลินิกแทน)', async () => {
+    const drug = await makeDrug('NO-THRESHOLD')
+
+    const rows = await listDrugStockBalances({ q: 'NO-THRESHOLD' })
+    const row = rows.find((r) => r.drugId === drug.id)
+
+    expect(row?.lowStockThreshold).toBeNull()
   })
 
   test('ค้นด้วยชื่อ → กรองเฉพาะยาที่ชื่อตรง', async () => {

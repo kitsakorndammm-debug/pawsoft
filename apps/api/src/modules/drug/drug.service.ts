@@ -181,7 +181,22 @@ export type DrugInput = {
   /** ราคาเป็นข้อความ — ดู `cleanPrice` */
   price?: string | null
   categoryId?: bigint | null
+  /** เกณฑ์แจ้งเตือนสต็อกต่ำของยาตัวนี้ — `null` = ใช้ค่ากลางของคลินิก */
+  lowStockThreshold?: number | null
   note?: string | null
+}
+
+/** จำนวนเต็ม ไม่ติดลบ — ติดลบไม่มีความหมาย (บังคับที่ฐานด้วย CHECK) */
+function cleanLowStockThreshold(raw: number | null | undefined): number | null {
+  if (raw === null || raw === undefined) return null
+  if (!Number.isInteger(raw) || raw < 0) {
+    throw invalid('เกณฑ์แจ้งเตือนสต็อกต่ำต้องเป็นจำนวนเต็มไม่ติดลบ', {
+      field: 'lowStockThreshold',
+      value: raw,
+    })
+  }
+
+  return raw
 }
 
 function clean(input: DrugInput) {
@@ -212,6 +227,7 @@ function clean(input: DrugInput) {
     }),
     price,
     categoryId: input.categoryId ?? null,
+    lowStockThreshold: cleanLowStockThreshold(input.lowStockThreshold),
     note: cleanOptional(input.note, { field: 'note', label: 'บันทึก', max: TEXT_MAX }),
   }
 }

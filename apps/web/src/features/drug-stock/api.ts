@@ -8,6 +8,12 @@ import { api } from '@/lib/api-client'
  * ของเดิมยังอยู่ครบ (ผู้ใช้ตัดสิน 2026-09-20)
  */
 
+/**
+ * เกณฑ์แจ้งเตือนสต็อกต่ำเมื่อยาไม่ได้ตั้งเกณฑ์ของตัวเอง (ผู้ใช้ตัดสิน 2026-09-20:
+ * เหลือ 5 หรือน้อยกว่า) — ใช้ร่วมกันทั้งกระดิ่งแจ้งเตือนและหน้าคลังยา
+ */
+export const DEFAULT_LOW_STOCK_THRESHOLD = 5
+
 /** ยอดคงเหลือหนึ่งแถวต่อยาหนึ่งตัว */
 export type DrugStockBalance = {
   id: number
@@ -19,6 +25,8 @@ export type DrugStockBalance = {
   quantity: string
   /** วันหมดอายุที่ใกล้ที่สุดในบรรดาล็อตที่เคยรับเข้า (`YYYY-MM-DD`) — `null` ถ้าไม่เคยระบุ */
   nearestExpiry: string | null
+  /** เกณฑ์แจ้งเตือนสต็อกต่ำของยาตัวนี้ — `null` = ใช้ค่ากลางของคลินิก */
+  lowStockThreshold: number | null
 }
 
 /**

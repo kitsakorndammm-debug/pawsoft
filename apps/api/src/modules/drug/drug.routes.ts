@@ -45,6 +45,7 @@ const WRITE_FIELDS = new Set([
   'packageSize',
   'price',
   'categoryId',
+  'lowStockThreshold',
   'note',
 ])
 
@@ -65,6 +66,7 @@ const toWire = (row: Drug) => ({
   packageSize: row.packageSize,
   price: row.price === null ? null : row.price.toString(),
   categoryId: row.categoryId === null ? null : Number(row.categoryId),
+  lowStockThreshold: row.lowStockThreshold,
   isActive: row.isActive,
   note: row.note,
 })
@@ -94,6 +96,8 @@ const writeSchema = t.Object(
      * ฟอร์มไม่ได้ถาม ซึ่งเป็นคนละเรื่อง
      */
     categoryId: nullableId,
+    /** `null` = ใช้เกณฑ์กลางของคลินิก — ต้องส่งมาเสมอ เหตุผลเดียวกับ `categoryId` */
+    lowStockThreshold: nullableId,
     note: nullableText,
   },
   { additionalProperties: false },
@@ -108,6 +112,7 @@ const toInput = (body: Record<string, unknown>): DrugInput => ({
   packageSize: (body['packageSize'] as string | null | undefined) ?? null,
   price: (body['price'] as string | null | undefined) ?? null,
   categoryId: body['categoryId'] === null ? null : BigInt(body['categoryId'] as number),
+  lowStockThreshold: (body['lowStockThreshold'] as number | null | undefined) ?? null,
   note: (body['note'] as string | null | undefined) ?? null,
 })
 

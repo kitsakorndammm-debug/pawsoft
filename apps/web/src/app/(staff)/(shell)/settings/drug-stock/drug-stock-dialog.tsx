@@ -1,8 +1,8 @@
 'use client'
 
+import { useEffect } from 'react'
 import { z } from 'zod'
 
-import { AppDatePicker } from '@/components/common/app-date-picker'
 import { AppFormField } from '@/components/common/app-form-field'
 import { ComboboxField } from '@/components/common/combobox-field'
 import { FormDialog } from '@/components/common/form-dialog'
@@ -11,7 +11,14 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useDrugOptions } from '@/features/drug/hooks'
 import { useCreateDrugStockMovement } from '@/features/drug-stock/hooks'
-import { useWarehouseStockBalances, useWithdrawFromWarehouse } from '@/features/warehouse-stock/hooks'
+import type { WarehouseStockLot } from '@/features/warehouse-stock/api'
+import {
+  useWarehouseStockBalances,
+  useWarehouseStockLots,
+  useWithdrawFromWarehouse,
+} from '@/features/warehouse-stock/hooks'
+import { formatDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 /** ยาวสุดที่ BE รับ — ตรงกับ `REASON_MAX` ใน `apps/api/src/modules/drug-stock/drug-stock.service.ts` */
 const REASON_MAX = 500
@@ -35,8 +42,11 @@ const schema = z
       .regex(QUANTITY_PATTERN, 'จำนวนต้องเป็นตัวเลข ทศนิยมไม่เกินสองตำแหน่ง')
       .refine((v) => Number(v) !== 0, 'จำนวนต้องไม่เป็นศูนย์'),
     reason: z.string().trim().max(REASON_MAX, `ยาวเกิน ${REASON_MAX} ตัวอักษร`).optional(),
-    // ไม่บังคับกรอก — มีความหมายเฉพาะตอนเบิกจากคลัง (ดูฝั่ง BE ก่อนใส่ฟิลด์ใหม่)
-    expiresOn: z.string().trim().optional(),
+    /**
+     * ล็อตที่เลือกเบิก — ไม่บังคับ (ยาที่ไม่เคยมีล็อตให้เลือกก็เบิกได้)
+     * มีค่า → วันหมดอายุของสต็อกที่หมอใช้มาจากล็อตนี้เสมอ (ผู้ใช้ตัดสิน 2026-09-23)
+     */
+    lotId: z.number().nullable(),
   })
   // เบิกต้องเป็นบวก — ตรงกับที่ BE ปฏิเสธ ให้กรอบแดงขึ้นก่อนยิง API
   .refine((data) => data.mode !== 'WITHDRAW' || Number(data.quantity) > 0, {
@@ -78,7 +88,9 @@ export function DrugStockDialog({
         drugId: values.drugId,
         quantity: values.quantity,
         reason: values.reason?.trim() || null,
-        expiresOn: values.expiresOn?.trim() || null,
+        lotId: values.lotId,
+        // วันหมดอายุมาจากล็อตที่เลือกเสมอตอนมีล็อต — ไม่มีล็อตให้เลือกก็ไม่มีวันหมดอายุ
+        expiresOn: null,
       })
 
       return `เบิก "${drugName}" จากคลังจำนวน ${values.quantity} แล้ว`
@@ -106,7 +118,7 @@ export function DrugStockDialog({
         mode: 'WITHDRAW',
         quantity: '',
         reason: '',
-        expiresOn: '',
+        lotId: null,
       }}
       onSubmit={handleSubmit}
       formKey="new"
@@ -157,15 +169,13 @@ export function DrugStockDialog({
               <Input {...form.register('quantity')} disabled={formPending} />
             </AppFormField>
 
-            {form.watch('mode') === 'WITHDRAW' && (
-              <AppFormField name="expiresOn" label="วันหมดอายุ">
-                <AppDatePicker
-                  value={form.watch('expiresOn') as string | null}
-                  onChange={(v) => form.setValue('expiresOn', v ?? '')}
-                  disabled={formPending}
-                  aria-label="วันหมดอายุ"
-                />
-              </AppFormField>
+            {form.watch('mode') === 'WITHDRAW' && selectedDrugId !== undefined && (
+              <LotPicker
+                drugId={selectedDrugId}
+                value={form.watch('lotId') as number | null}
+                onChange={(v) => form.setValue('lotId', v)}
+                disabled={formPending}
+              />
             )}
 
             {form.watch('mode') === 'ADJUST' && (
@@ -181,5 +191,88 @@ export function DrugStockDialog({
         )
       }}
     </FormDialog>
+  )
+}
+
+/**
+ * เลือกล็อตที่จะเบิก — เรียงใกล้หมดอายุก่อนมาจาก BE แล้ว **เลือกล็อตแรกให้อัตโนมัติ**
+ * (แนะนำล็อตที่ใกล้หมดอายุที่สุด — ผู้ใช้ตัดสิน 2026-09-23) พนักงานกดเปลี่ยนเป็นล็อตอื่นได้
+ *
+ * **ไม่มีล็อตให้เลือก → ไม่แสดงอะไรเลย** ไม่ใช่ช่องกรอกวันหมดอายุเองแบบเดิม — ยอดที่มา
+ * จากการปรับยอดคลังล้วน ๆ (ไม่เคยมีการซื้อเข้าเป็นล็อต) ไม่มีวันหมดอายุให้อ้างอิงอยู่แล้ว
+ */
+function LotPicker({
+  drugId,
+  value,
+  onChange,
+  disabled,
+}: {
+  drugId: number
+  value: number | null
+  onChange: (lotId: number | null) => void
+  disabled: boolean
+}) {
+  const lots = useWarehouseStockLots(drugId)
+  const rows = lots.data ?? []
+
+  // สลับยาหรือล็อตที่เคยเลือกไว้หมดไปแล้ว → กลับไปแนะนำล็อตแรก (ใกล้หมดอายุที่สุด)
+  useEffect(() => {
+    if (rows.length === 0) {
+      if (value !== null) onChange(null)
+      return
+    }
+    if (!rows.some((lot) => lot.id === value)) {
+      onChange(rows[0]?.id ?? null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- เช็คแค่ตอนรายการล็อตหรือยาที่เลือกเปลี่ยน
+  }, [drugId, rows.map((r) => r.id).join(',')])
+
+  if (lots.isPending) {
+    return <p className="text-xs text-muted-foreground">กำลังโหลดล็อต…</p>
+  }
+
+  if (rows.length === 0) return null
+
+  return (
+    <AppFormField name="lotId" label="ล็อตที่จะเบิก">
+      <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+        {rows.map((lot) => (
+          <LotRow
+            key={lot.id}
+            lot={lot}
+            selected={lot.id === value}
+            disabled={disabled}
+            onSelect={() => onChange(lot.id)}
+          />
+        ))}
+      </div>
+    </AppFormField>
+  )
+}
+
+function LotRow({
+  lot,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  lot: WarehouseStockLot
+  selected: boolean
+  disabled: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onSelect}
+      className={cn(
+        'flex items-center justify-between gap-2 rounded-md border p-2 text-left text-sm transition-colors',
+        selected ? 'border-primary bg-primary/5' : 'hover:bg-accent',
+      )}
+    >
+      <span>{lot.expiresOn ? `หมดอายุ ${formatDate(lot.expiresOn)}` : 'ไม่ระบุวันหมดอายุ'}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">เหลือ {lot.remaining}</span>
+    </button>
   )
 }

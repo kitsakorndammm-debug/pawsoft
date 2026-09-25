@@ -82,6 +82,10 @@ model Drug {
   categoryId BigInt?       @map("category_id")
   category   DrugCategory? @relation(fields: [categoryId], references: [id])
 
+  /// เกณฑ์แจ้งเตือนสต็อกต่ำของยาตัวนี้ — `null` = ใช้ค่ากลางของคลินิก (ผู้ใช้ตัดสิน
+  /// 2026-09-23: ยาบางตัวใช้เร็วบางตัวใช้ช้า เกณฑ์เดียวทั้งคลินิกไม่พอ)
+  lowStockThreshold Int? @map("low_stock_threshold")
+
   /// ครั้งที่ยาตัวนี้ถูกจ่าย — กันการลบยาที่เคยจ่ายไปแล้ว (`onDelete: Restrict`)
   visitDrugs VisitDrug[]
 
@@ -207,12 +211,30 @@ model WarehouseStockMovement {
   /// เหตุผล — บังคับกรอกเฉพาะตอน `type = ADJUST` (บังคับที่ฐานด้วย CHECK)
   reason String? @db.VarChar(500)
 
+  /// วันหมดอายุของล็อตนี้ — ใส่ได้เฉพาะตอน `type = RECEIVE` (ผู้ใช้ตัดสิน 2026-09-23:
+  /// ต้องรู้วันหมดอายุตั้งแต่ตอนซื้อเข้า ไม่ใช่มาเดาเอาตอนเบิกออกไปใช้ทีหลัง)
+  expiresOn DateTime? @map("expires_on") @db.Date
+
+  /// วันที่ซื้อเข้าจริง — พนักงานกรอกเอง ย้อนหลังได้ (ใบส่งของมาถึงวันหนึ่ง แต่กรอกอีกวัน)
+  /// ใส่ได้เฉพาะตอน `type = RECEIVE`
+  receivedOn DateTime? @map("received_on") @db.Date
+
+  /// แถว `RECEIVE` ที่เป็นล็อตต้นทาง — ใส่ได้เฉพาะตอน `type = WITHDRAW` เพื่อรู้ว่าเบิกจาก
+  /// ล็อตไหน (เลือกล็อตที่ใกล้หมดอายุก่อนได้ — ผู้ใช้ตัดสิน 2026-09-23) ยอดคงเหลือของล็อต
+  /// คำนวณจาก quantity ของแถว RECEIVE ตัวนี้ ลบผลรวม WITHDRAW ทุกแถวที่ชี้กลับมา
+  lotId BigInt?                 @map("lot_id")
+  lot   WarehouseStockMovement? @relation("WarehouseStockLot", fields: [lotId], references: [id])
+
+  /// แถว `WITHDRAW` ทั้งหมดที่เบิกจากล็อตนี้ — มีความหมายเฉพาะตอนแถวนี้เป็น `RECEIVE`
+  withdrawalsFromLot WarehouseStockMovement[] @relation("WarehouseStockLot")
+
   /// ใครเป็นคนบันทึกรายการนี้
   createdAt DateTime @default(now()) @map("created_at")
   createdBy BigInt   @map("created_by")
 
   @@index([drugId])
   @@index([createdAt])
+  @@index([lotId])
   @@map("warehouse_stock_movement")
 }
 
