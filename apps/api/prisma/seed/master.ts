@@ -2,6 +2,7 @@ import { db } from '../../src/kit/db.ts'
 import { SYSTEM_USER_ID } from '../../src/kit/actor.ts'
 import {
   BILLING_PERMISSION,
+  DRUG_STOCK_PERMISSION,
   MASTER_PERMISSION,
   MEDICAL_PERMISSION,
   RECEPTION_PERMISSION,
@@ -129,18 +130,24 @@ export async function seedMaster(): Promise<MasterSeed> {
   // ชุดสิทธิ์คลินิกทั่วไป — อ้างชุดเดียวกับที่ `seed-e2e-db.ts` ใช้พิสูจน์กฎ
   // `invoice_verifier_not_submitter_check` และ `main:medical:write` (เหตุผลของแต่ละ
   // key อยู่ที่นั่น) เพื่อให้แอดมินมีบทบาทให้เลือกตั้งแต่วันแรก ไม่ต้องไล่ติ๊กเอง
+  // สต็อกยา (ดู/บันทึก) ตามที่ตั้งใจไว้ตอนแยกสิทธิ์นี้ออกจาก `master` (2026-09-08) —
+  // "หมอดูได้ เคาน์เตอร์ดู+บันทึกได้" (ดู `///` บน `DRUG_STOCK_PERMISSION`) แต่ชุดสิทธิ์
+  // ตัวอย่างเดิมตรงนี้ตกหล่นไม่ได้ใส่ไว้ (พบจริง 2026-09-23)
   await upsertRole('พนักงานเคาน์เตอร์', [
     RECEPTION_PERMISSION.read,
     RECEPTION_PERMISSION.write,
     BILLING_PERMISSION.read,
     BILLING_PERMISSION.collect,
     MASTER_PERMISSION.read,
+    DRUG_STOCK_PERMISSION.read,
+    DRUG_STOCK_PERMISSION.write,
   ])
   await upsertRole('สัตวแพทย์', [
     RECEPTION_PERMISSION.read,
     RECEPTION_PERMISSION.write,
     MEDICAL_PERMISSION.write,
     MASTER_PERMISSION.read,
+    DRUG_STOCK_PERMISSION.read,
   ])
   await upsertRole('พนักงานบัญชี', [BILLING_PERMISSION.read, BILLING_PERMISSION.verify])
 

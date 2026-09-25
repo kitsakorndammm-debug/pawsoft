@@ -3,6 +3,7 @@ import { SYSTEM_USER_ID } from '../../src/kit/actor.ts'
 import { seed } from '../../src/kit/seed.ts'
 import {
   BILLING_PERMISSION,
+  DRUG_STOCK_PERMISSION,
   MASTER_PERMISSION,
   MEDICAL_PERMISSION,
   RECEPTION_PERMISSION,
@@ -123,12 +124,16 @@ async function main(): Promise<void> {
   await seed()
   const master = await seedMaster()
 
+  // สต็อกยา (ดู+บันทึก) — ตรงกับ `///` บน `DRUG_STOCK_PERMISSION` ("เคาน์เตอร์ดู+บันทึกได้")
+  // ตกหล่นในชุดสิทธิ์ตัวอย่างเดิม (พบจริง 2026-09-23) แก้พร้อมกันทั้ง master.ts กับที่นี่
   const counterRole = await upsertRole('เคาน์เตอร์ (e2e)', [
     RECEPTION_PERMISSION.read,
     RECEPTION_PERMISSION.write,
     BILLING_PERMISSION.read,
     BILLING_PERMISSION.collect,
     MASTER_PERMISSION.read,
+    DRUG_STOCK_PERMISSION.read,
+    DRUG_STOCK_PERMISSION.write,
   ])
 
   /**
@@ -144,6 +149,8 @@ async function main(): Promise<void> {
     RECEPTION_PERMISSION.write,
     MEDICAL_PERMISSION.write,
     MASTER_PERMISSION.read,
+    // ดูสต็อกยาได้ (ไม่ใช่บันทึก) — ตรงกับ `///` บน `DRUG_STOCK_PERMISSION`
+    DRUG_STOCK_PERMISSION.read,
   ])
 
   const accountantRole = await upsertRole('บัญชี (e2e)', [
