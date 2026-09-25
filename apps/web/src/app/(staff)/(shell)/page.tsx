@@ -13,6 +13,21 @@ import { toErrorMessage } from '@/lib/api-client'
 import { BILLING_READ, HR_READ, RECEPTION_READ } from '@/lib/permissions'
 import { ROUTE_BILLING, ROUTE_LOGIN, ROUTE_QUEUE, ROUTE_ROLES, ROUTE_USERS } from '@/lib/routes'
 
+/**
+ * สีไอคอนต่อการ์ด — แยกจากโทเคนสีหลักของระบบ (primary/success/warning/destructive)
+ * โดยตั้งใจ เพราะโทเคนพวกนั้นมีความหมาย (สำเร็จ/เตือน/อันตราย) อยู่แล้วที่อื่นในระบบ
+ * สีตรงนี้แค่ช่วยแยกแต่ละการ์ดให้มองแยกกันง่ายบนหน้าแรก (ผู้ใช้ทักท้วง 2026-09-25:
+ * "หน้าแรกดูโล้น") ไม่ได้สื่อความหมายอะไรเป็นพิเศษ
+ */
+const CARD_COLOR = {
+  blue: 'bg-blue-500/10 text-blue-600',
+  violet: 'bg-violet-500/10 text-violet-600',
+  amber: 'bg-amber-500/10 text-amber-600',
+  emerald: 'bg-emerald-500/10 text-emerald-600',
+} as const
+
+type CardColor = keyof typeof CARD_COLOR
+
 /** หน้าแรกหลังเข้าสู่ระบบของพนักงาน */
 function Home() {
   const { data: me } = useMe()
@@ -61,12 +76,14 @@ function Home() {
                 icon={Users}
                 title="บัญชีผู้ใช้"
                 desc="เพิ่ม แก้ไข ระงับบัญชีพนักงาน"
+                color="blue"
               />
               <NavCard
                 href={ROUTE_ROLES}
                 icon={ShieldCheck}
                 title="บทบาทและสิทธิ์"
                 desc="กำหนดว่าใครทำอะไรได้"
+                color="violet"
               />
             </>
           )}
@@ -86,19 +103,21 @@ function NavCard({
   icon: Icon,
   title,
   desc,
+  color,
 }: {
   href: string
   icon: typeof Users
   title: string
   desc: string
+  color: CardColor
 }) {
   return (
     <Link
       href={href}
       className="flex items-center gap-3 rounded-2xl border bg-card p-4 transition-colors hover:bg-accent"
     >
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10">
-        <Icon className="size-5 text-primary" />
+      <span className={`flex size-11 shrink-0 items-center justify-center rounded-full ${CARD_COLOR[color]}`}>
+        <Icon className="size-5" />
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="font-medium">{title}</span>
@@ -119,6 +138,7 @@ function StatCard({
   href,
   icon: Icon,
   title,
+  color,
   loading,
   error,
   empty,
@@ -130,6 +150,7 @@ function StatCard({
   href: string
   icon: typeof Banknote
   title: string
+  color: CardColor
   loading: boolean
   error: unknown
   empty: boolean
@@ -146,8 +167,8 @@ function StatCard({
     >
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-2 font-medium">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
-            <Icon className="size-4 text-primary" />
+          <span className={`flex size-9 shrink-0 items-center justify-center rounded-full ${CARD_COLOR[color]}`}>
+            <Icon className="size-4" />
           </span>
           {title}
         </span>
@@ -196,6 +217,7 @@ function QueueCard() {
       href={ROUTE_QUEUE}
       icon={CalendarClock}
       title="คิววันนี้"
+      color="amber"
       loading={queue.isPending}
       error={queue.isError ? queue.error : null}
       empty={rows.length === 0}
@@ -226,6 +248,7 @@ function PendingInvoiceCard() {
       href={`${ROUTE_BILLING}?status=AWAITING_VERIFY`}
       icon={Banknote}
       title="บิลรอยืนยันยอด"
+      color="emerald"
       loading={invoices.isPending}
       error={invoices.isError ? invoices.error : null}
       empty={total === 0}
