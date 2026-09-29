@@ -4,6 +4,7 @@ import { seed } from '../../src/kit/seed.ts'
 import {
   BILLING_PERMISSION,
   DRUG_STOCK_PERMISSION,
+  DRUG_WAREHOUSE_PERMISSION,
   MASTER_PERMISSION,
   MEDICAL_PERMISSION,
   RECEPTION_PERMISSION,
@@ -126,6 +127,8 @@ async function main(): Promise<void> {
 
   // สต็อกยา (ดู+บันทึก) — ตรงกับ `///` บน `DRUG_STOCK_PERMISSION` ("เคาน์เตอร์ดู+บันทึกได้")
   // ตกหล่นในชุดสิทธิ์ตัวอย่างเดิม (พบจริง 2026-09-23) แก้พร้อมกันทั้ง master.ts กับที่นี่
+  // คลังยา (ซื้อเข้า/ปรับยอด/เบิก) ตกหล่นแบบเดียวกัน (พบจริง 2026-09-30) — ดู `///` บน
+  // `DRUG_WAREHOUSE_PERMISSION`
   const counterRole = await upsertRole('เคาน์เตอร์ (e2e)', [
     RECEPTION_PERMISSION.read,
     RECEPTION_PERMISSION.write,
@@ -134,6 +137,8 @@ async function main(): Promise<void> {
     MASTER_PERMISSION.read,
     DRUG_STOCK_PERMISSION.read,
     DRUG_STOCK_PERMISSION.write,
+    DRUG_WAREHOUSE_PERMISSION.read,
+    DRUG_WAREHOUSE_PERMISSION.write,
   ])
 
   /**

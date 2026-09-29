@@ -3,6 +3,7 @@ import { SYSTEM_USER_ID } from '../../src/kit/actor.ts'
 import {
   BILLING_PERMISSION,
   DRUG_STOCK_PERMISSION,
+  DRUG_WAREHOUSE_PERMISSION,
   MASTER_PERMISSION,
   MEDICAL_PERMISSION,
   RECEPTION_PERMISSION,
@@ -133,6 +134,10 @@ export async function seedMaster(): Promise<MasterSeed> {
   // สต็อกยา (ดู/บันทึก) ตามที่ตั้งใจไว้ตอนแยกสิทธิ์นี้ออกจาก `master` (2026-09-08) —
   // "หมอดูได้ เคาน์เตอร์ดู+บันทึกได้" (ดู `///` บน `DRUG_STOCK_PERMISSION`) แต่ชุดสิทธิ์
   // ตัวอย่างเดิมตรงนี้ตกหล่นไม่ได้ใส่ไว้ (พบจริง 2026-09-23)
+  // คลังยา (ซื้อเข้า/ปรับยอด/เบิก) ตกหล่นแบบเดียวกัน — ประกาศ key ไว้ตั้งแต่ 15 ก.ย.
+  // แต่ไม่เคยใส่ให้บทบาทไหนเลย ทำให้ฟีเจอร์ล็อตหมดอายุใช้งานจริงไม่ได้นอกจากผ่าน admin
+  // (พบจริง 2026-09-30) — ให้เคาน์เตอร์เพราะคลินิกตัวอย่างนี้ไม่มีตำแหน่งดูแลสต็อกกลาง
+  // แยกต่างหาก ดู `///` บน `DRUG_WAREHOUSE_PERMISSION`
   await upsertRole('พนักงานเคาน์เตอร์', [
     RECEPTION_PERMISSION.read,
     RECEPTION_PERMISSION.write,
@@ -141,6 +146,8 @@ export async function seedMaster(): Promise<MasterSeed> {
     MASTER_PERMISSION.read,
     DRUG_STOCK_PERMISSION.read,
     DRUG_STOCK_PERMISSION.write,
+    DRUG_WAREHOUSE_PERMISSION.read,
+    DRUG_WAREHOUSE_PERMISSION.write,
   ])
   await upsertRole('สัตวแพทย์', [
     RECEPTION_PERMISSION.read,
