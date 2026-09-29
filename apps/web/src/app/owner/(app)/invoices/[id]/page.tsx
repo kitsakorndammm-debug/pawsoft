@@ -1,12 +1,13 @@
 'use client'
 
-import { ArrowLeft, Check, Clock, Pill, Receipt, Stethoscope, Upload } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, Clock, Pill, Stethoscope, Upload } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { FileDrop } from '@/components/common/file-drop'
+import { PetAvatar } from '@/components/common/pet-avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,6 +25,7 @@ import {
   useUploadMySlip,
 } from '@/features/payment/my-hooks'
 import { PromptPayQrView } from '@/features/payment/promptpay-qr'
+import { petPhotoUrl } from '@/features/owner-auth/api'
 import { useOwnerMe } from '@/features/owner-auth/hooks'
 import { toErrorMessage } from '@/lib/api-client'
 import { ROUTE_OWNER_INVOICES, ROUTE_OWNER_LOGIN } from '@/lib/routes'
@@ -82,7 +84,11 @@ export default function MyInvoicePage() {
         <Button variant="ghost" size="icon-sm" nativeButton={false} render={<Link href={ROUTE_OWNER_INVOICES} />}>
           <ArrowLeft className="size-4" />
         </Button>
-        <Receipt className="size-5 text-primary" />
+        <PetAvatar
+          src={row.visit.petId === null ? null : petPhotoUrl(row.visit.petId)}
+          alt={row.visit.petName ?? 'สัตว์เลี้ยง'}
+          size="sm"
+        />
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-semibold">{row.code}</h1>
           <p className="text-xs text-muted-foreground">
@@ -150,9 +156,36 @@ export default function MyInvoicePage() {
         </section>
       ) : null}
 
+      {/*
+        ---- ถูกตีกลับ ----
+
+        **โชว์เหตุผลเสมอตอนถูกตีกลับ ไม่ว่าจะจ่ายซ้ำได้เลยหรือต้องรอเจ้าหน้าที่**
+        (ผู้ใช้ทักท้วง 2026-09-29: หน้านี้เคยไม่มีทางรู้เลยว่าทำไมถึงจ่ายไม่ได้
+        อีก ทั้งที่บิลถูกตีกลับไปแล้ว)
+      */}
+      {row.status === 'REJECTED' && row.rejectReason ? (
+        <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <p className="font-medium">ใบนี้ถูกตีกลับ</p>
+            <p className="text-red-800">{row.rejectReason}</p>
+          </div>
+        </div>
+      ) : null}
+
       {/* ---- จ่าย ---- */}
       {owes ? (
         <PayBox invoiceId={row.id} amount={row.outstanding} invoiceCode={row.code} />
+      ) : row.status === 'REJECTED' ? (
+        /**
+         * **ถูกตีกลับแต่ยอดค้างยังเป็น 0** — แปลว่าเป็นยอดที่พนักงานบันทึกจากการ
+         * จ่ายหน้าร้าน (ไม่ใช่ที่ลูกค้าแนบเอง) ระบบไม่ลบให้อัตโนมัติเพราะเงินอาจ
+         * ได้รับจริงแล้ว แค่หลักฐานผิด — ต้องรอเจ้าหน้าที่ตรวจแก้ ไม่ใช่ให้จ่ายซ้ำ
+         */
+        <p className="flex items-center gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          <Clock className="size-4 shrink-0" />
+          เจ้าหน้าที่กำลังตรวจสอบรายการนี้ — ไม่ต้องชำระซ้ำ
+        </p>
       ) : row.status === 'AWAITING_VERIFY' ? (
         <p className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           <Clock className="size-4 shrink-0" />

@@ -499,7 +499,19 @@ export async function verifyInvoice(
   })
 }
 
-/** บัญชีตีกลับ — ใบกลับไปแก้ได้ */
+/**
+ * บัญชีตีกลับ — ใบกลับไปแก้ได้
+ *
+ * **ลูกค้าจ่ายเองแล้วถูกตีกลับ → เอายอดที่ผิดออกให้อัตโนมัติ** (ผู้ใช้ตัดสิน
+ * 2026-09-29) เพื่อให้ยอดค้างเปิดกลับมาทันที และหน้าใบเสร็จของเขาเองแสดงปุ่ม
+ * จ่ายเงินให้เองโดยไม่ต้องรอใคร — เหตุผลเดียวกับ `removePayment` ที่เคาน์เตอร์
+ * ต้องกดเองตอนนี้ แค่ทำให้อัตโนมัติเฉพาะเคสนี้
+ *
+ * **ไม่แตะยอดที่พนักงานบันทึกเอง** — เคสลูกค้าสแกนจ่ายหน้าร้านแล้วพนักงานถ่าย
+ * สลิปมากรอก เงินอาจได้รับจริงแล้ว แค่หลักฐาน/ยอดที่กรอกผิด · ลบอัตโนมัติให้เคส
+ * นี้ด้วยจะทำให้ลูกค้าเข้าใจผิดว่าต้องจ่ายซ้ำทั้งที่จ่ายที่ร้านไปแล้ว — ต้องให้
+ * พนักงานตรวจแล้วแก้เองผ่านกล่องเก็บเงิน (ปุ่ม "เอารายการนี้ออก" ที่มีอยู่แล้ว)
+ */
 export async function rejectInvoice(
   id: bigint,
   reason: string,
@@ -519,7 +531,9 @@ export async function rejectInvoice(
   })
   if (value === null) throw invalid('ระบุเหตุผลที่ตีกลับ', { field: 'rejectReason' })
 
-  return inTx(outerTx, async (tx) => {
+  let slipToRemove: string | null = null
+
+  const updated = await inTx(outerTx, async (tx) => {
     const updated = await tx.invoice.update({
       where: { id },
       data: { status: 'REJECTED', rejectReason: value, updatedBy: actorId },
@@ -534,8 +548,31 @@ export async function rejectInvoice(
       userId: actorId,
     })
 
+    // หนึ่งใบมีได้แค่หนึ่งแถวการจ่าย ณ เวลาหนึ่ง (ดู `///` บน `addPayment`)
+    const payment = await tx.payment.findFirst({ where: { invoiceId: id } })
+    if (payment && payment.createdByOwnerAccountId !== null) {
+      await tx.payment.delete({ where: { id: payment.id } })
+      await recalcPaid(id, tx)
+
+      await writeAudit(tx, {
+        action: `${MODULE}.remove`,
+        module: MODULE,
+        recordId: payment.id,
+        before: { invoiceId: Number(id), amount: payment.amount.toString() },
+        after: null,
+        userId: actorId,
+      })
+
+      slipToRemove = payment.slipPath
+    }
+
     return updated
   })
+
+  // ลบไฟล์หลัง commit — เหตุผลเดียวกับ `removePayment`
+  if (slipToRemove !== null) await removeSlip(slipToRemove)
+
+  return updated
 }
 
 /** ยกเลิกใบ — ออกผิด หรือคิวถูกยกเลิก · **ใบที่ยืนยันแล้วยกเลิกไม่ได้** */
@@ -648,6 +685,8 @@ export type InvoiceVisitSummary = {
   ownerName: string | null
   ownerPhone: string | null
   petName: string | null
+  /** `null` เมื่อเป็นสัตว์หน้างานที่ยังไม่ได้ลงทะเบียน (`walkInPetName` ไม่มีแถวให้ชี้) */
+  petId: bigint | null
 }
 
 export type InvoiceWithPayments = Invoice & {
@@ -662,7 +701,7 @@ const VISIT_SUMMARY_SELECT = {
   walkInOwnerName: true,
   walkInPetName: true,
   owner: { select: { name: true, phone: true } },
-  pet: { select: { name: true } },
+  pet: { select: { id: true, name: true } },
 } as const
 
 function visitSummaryOf(visit: {
@@ -671,7 +710,7 @@ function visitSummaryOf(visit: {
   walkInOwnerName: string | null
   walkInPetName: string | null
   owner: { name: string; phone: string | null } | null
-  pet: { name: string } | null
+  pet: { id: bigint; name: string } | null
 }): InvoiceVisitSummary {
   return {
     queueNumber: visit.queueNumber,
@@ -679,6 +718,7 @@ function visitSummaryOf(visit: {
     ownerName: visit.owner?.name ?? visit.walkInOwnerName,
     ownerPhone: visit.owner?.phone ?? null,
     petName: visit.pet?.name ?? visit.walkInPetName,
+    petId: visit.pet?.id ?? null,
   }
 }
 

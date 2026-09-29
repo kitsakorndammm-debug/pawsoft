@@ -82,6 +82,8 @@ export type InvoiceVisitSummary = {
   ownerName: string | null
   ownerPhone: string | null
   petName: string | null
+  /** `null` เมื่อเป็นสัตว์หน้างานที่ยังไม่ได้ลงทะเบียน — ไม่มีรูปให้โหลด */
+  petId: number | null
 }
 
 export type Invoice = {

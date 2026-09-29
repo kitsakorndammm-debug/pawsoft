@@ -118,9 +118,11 @@ describe('ใบเสร็จ · พ่วงชื่อเจ้าของ
     expect(detail.visit.ownerName).toBe(`${NAME_PREFIX}REGISTERED`)
     expect(detail.visit.ownerPhone).toBe('0812345678')
     expect(detail.visit.petName).toBe(`${NAME_PREFIX}REGISTERED`)
+    // `petId` เอาไว้ให้หน้าเว็บโหลดรูปสัตว์มาโชว์บนใบเสร็จ (ผู้ใช้ขอ 2026-09-29)
+    expect(detail.visit.petId).toBe(pet.id)
   })
 
-  test('walk-in ไม่มีทะเบียน → ใช้ชื่อที่กรอกหน้างาน', async () => {
+  test('walk-in ไม่มีทะเบียน → ใช้ชื่อที่กรอกหน้างาน และไม่มี petId ให้โหลดรูป', async () => {
     const visit = await makeVisit({
       walkInOwnerName: `${NAME_PREFIX}WALKIN-OWNER`,
       walkInPetName: `${NAME_PREFIX}WALKIN-PET`,
@@ -131,6 +133,7 @@ describe('ใบเสร็จ · พ่วงชื่อเจ้าของ
 
     expect(detail.visit.ownerName).toBe(`${NAME_PREFIX}WALKIN-OWNER`)
     expect(detail.visit.petName).toBe(`${NAME_PREFIX}WALKIN-PET`)
+    expect(detail.visit.petId).toBeNull()
   })
 
   test('listInvoices ก็พ่วงชื่อมาด้วยเหมือนกัน (ไม่ใช่แค่ getInvoiceDetail)', async () => {

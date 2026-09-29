@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { AppDatePicker } from '@/components/common/app-date-picker'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { DataTable, type DataTableColumn } from '@/components/common/data-table'
+import { PetAvatar } from '@/components/common/pet-avatar'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -35,6 +36,7 @@ import {
   type InvoiceLine,
   type InvoiceStatus,
 } from '@/features/payment/api'
+import { petPhotoUrl } from '@/features/pet/api'
 import { toErrorMessage } from '@/lib/api-client'
 import { formatDate } from '@/lib/format'
 import { BILLING_VERIFY } from '@/lib/permissions'
@@ -416,8 +418,11 @@ function InvoiceSummaryContent({ invoice }: { invoice: Invoice }) {
   return (
     <div className="flex flex-col gap-3 text-left">
       {/* ลูกค้า — ชื่อจริงถ้าลงทะเบียนแล้ว ไม่งั้นใช้ชื่อที่กรอกหน้างาน (มาจาก BE) */}
-      <div className="flex items-center gap-2 rounded-md border bg-card p-3 text-sm">
-        <UserRound className="size-4 shrink-0 text-primary-strong" />
+      <div className="flex items-center gap-3 rounded-md border bg-card p-3 text-sm">
+        <PetAvatar
+          src={invoice.visit.petId === null ? null : petPhotoUrl(invoice.visit.petId)}
+          alt={invoice.visit.petName ?? 'สัตว์เลี้ยง'}
+        />
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium text-foreground">
             {invoice.visit.ownerName ?? 'ไม่ระบุเจ้าของ'}

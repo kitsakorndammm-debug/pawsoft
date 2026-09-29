@@ -90,6 +90,7 @@ const toWire = (row: InvoiceWithPayments) => ({
     ownerName: row.visit.ownerName,
     ownerPhone: row.visit.ownerPhone,
     petName: row.visit.petName,
+    petId: row.visit.petId === null ? null : Number(row.visit.petId),
   },
   /** รายการที่คิดเงิน — ว่างในหน้าลิสต์ (ดู `listInvoices`) */
   lines: row.lines,
@@ -513,6 +514,7 @@ const toMyWire = (row: MyInvoiceRow) => ({
     queueNumber: row.visit.queueNumber,
     queueDate: row.visit.queueDate.toISOString().slice(0, 10),
     petName: row.visit.petName,
+    petId: row.visit.petId === null ? null : Number(row.visit.petId),
   },
 })
 

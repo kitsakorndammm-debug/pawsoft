@@ -3,7 +3,7 @@ import {
   Elysia,
   t } from 'elysia'
 
-import { invalid } from '../../kit/app-error.ts'
+import { invalid, notFound } from '../../kit/app-error.ts'
 import {
   getActor,
   guardReceptionRead,
@@ -25,6 +25,7 @@ import {
   updatePet,
   type PetInput,
 } from './pet.service.ts'
+import { resolvePhotoPath } from './pet.storage.ts'
 import type { Pet, PetSex } from '../../../prisma/generated/client.ts'
 
 /** สัตว์เลี้ยง — สิทธิ์ `clinic` เหมือนเจ้าของ ดู `owner.routes.ts` */
@@ -196,6 +197,35 @@ export const petRoutes = new Elysia({ prefix: '/api/pets' })
     beforeHandle: guardReceptionRead,
     detail: { tags: ['สัตว์เลี้ยง'], summary: 'ดูสัตว์รายตัว' },
   })
+
+  /**
+   * รูปสัตว์ — **`guardSignedIn` ไม่ใช่ `guardReceptionRead`**
+   *
+   * คนที่ดูบิลได้ (บัญชี — ไม่มี `reception:read`) ต้องเห็นรูปสัตว์ในใบเสร็จได้ด้วย
+   * เหตุผลเดียวกับ `/lookup` ของยา — สิ่งที่ต้องใช้กว้างกว่าเมนูจัดการสัตว์เลี้ยงเอง
+   *
+   * ส่งไบต์ ไม่ใช่ path — เหตุผลเดียวกับรูปสัตว์ฝั่งเจ้าของ (`appointment.routes.ts`)
+   */
+  .get(
+    '/:id/photo',
+    async ({ params, set }) => {
+      const row = await findPet(parseId(params.id))
+      if (row.photoPath === null) throw notFound('สัตว์ตัวนี้ยังไม่มีรูป')
+
+      const abs = resolvePhotoPath(row.photoPath)
+      if (abs === null) throw notFound('ไม่พบไฟล์')
+
+      const ext = abs.slice(abs.lastIndexOf('.'))
+      set.headers['content-type'] =
+        ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg'
+
+      return Bun.file(abs)
+    },
+    {
+      beforeHandle: guardSignedIn,
+      detail: { tags: ['สัตว์เลี้ยง'], summary: 'รูปสัตว์เลี้ยง' },
+    },
+  )
 
   .post(
     '/',

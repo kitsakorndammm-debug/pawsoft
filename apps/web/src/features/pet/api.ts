@@ -52,6 +52,17 @@ export type PetOption = {
   speciesId: number
 }
 
+/**
+ * ที่อยู่รูปสัตว์ฝั่งพนักงาน — เปิดตรง ๆ ได้เพราะ cookie ไปด้วย (โครงเดียวกับ
+ * `petPhotoUrl` ฝั่งเจ้าของใน `owner-auth/api.ts` แต่คนละเส้น: `guardSignedIn`
+ * ไม่ใช่กรองด้วย account — พนักงานที่ล็อกอินคนไหนก็เปิดได้ ไม่ใช่แค่เจ้าของตัวเอง)
+ *
+ * `?v=` บังคับให้เบราว์เซอร์โหลดใหม่หลังเปลี่ยนรูป — ดูเหตุผลเดียวกันฝั่งเจ้าของ
+ */
+export const petPhotoUrl = (petId: number, version?: string | number) =>
+  `${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3201'}/api/pets/${petId}/photo` +
+  (version === undefined ? '' : `?v=${version}`)
+
 export const petApi = {
   list: (input: {
     q: string
