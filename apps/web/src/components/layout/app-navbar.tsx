@@ -5,6 +5,7 @@ import {
   Cog,
   History,
   ListOrdered,
+  Menu,
   PawPrint,
   Wallet,
   Users,
@@ -12,8 +13,11 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState } from 'react'
 
 import { SETTINGS_PERMISSION_KEYS } from '@/components/layout/app-sider'
+import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useCanAny } from '@/features/auth/hooks'
 import { BILLING_READ, RECEPTION_READ } from '@/lib/permissions'
 import {
@@ -28,7 +32,12 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
- * แถบเมนูหลัก ใต้ header
+ * เมนูหลักของพนักงาน — **อยู่ในแถบเดียวกับ header** ไม่ใช่แถบแยกอีกชั้น (ผู้ใช้
+ * ตัดสิน 2026-09-29: เดิมมีสองแถบซ้อนกันกินที่แนวตั้งไปเปล่าๆ)
+ *
+ * จอกว้าง (sm ขึ้นไป) — โชว์เป็นแท็บเรียงแนวนอนในแถบเดียวกับโลโก้/ผู้ใช้
+ * จอแคบ (มือถือ) — ยุบเหลือปุ่มสามขีด กดแล้วค่อยกางเมนูออกมา ไม่งั้นแท็บเจ็ดอัน
+ * ไม่มีทางพอความกว้างจอ
  *
  * **แท็บเพิ่มวันที่หน้าของมันมีจริง** — แท็บที่กดแล้ว 404 แย่กว่าแท็บที่ยังไม่มี
  */
@@ -107,11 +116,17 @@ const NAV_ITEMS: NavItem[] = [
   },
 ]
 
-function NavTab({ item, pathname }: { item: NavItem; pathname: string }) {
+/** ใช้ร่วมกันทั้งแท็บแนวนอน (จอกว้าง) และแถวในเมนูสามขีด (มือถือ) */
+function useAllowed(item: NavItem): boolean {
   // เรียก hook เสมอ (สม่ำเสมอทุก render) แล้วค่อยตัดสินใจว่าจะใช้ผลมันหรือไม่ —
   // `requiredAny: undefined` แปลว่าเห็นได้ทุกคน ไม่ต้องพึ่งผลของ `useCanAny` เลย
   const anyGranted = useCanAny(item.requiredAny ?? [])
-  const allowed = item.requiredAny === undefined ? true : anyGranted
+
+  return item.requiredAny === undefined ? true : anyGranted
+}
+
+function DesktopNavTab({ item, pathname }: { item: NavItem; pathname: string }) {
+  const allowed = useAllowed(item)
   if (!allowed) return null
 
   const isActive = pathname.startsWith(item.activePrefix)
@@ -127,7 +142,7 @@ function NavTab({ item, pathname }: { item: NavItem; pathname: string }) {
        * ตัวเองอยู่หน้าไหน · พื้นสีทึบอ่านออกทันทีจากระยะไกล และไอคอนได้สีตามไปด้วย
        */
       className={cn(
-        'relative my-1.5 flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-all',
+        'relative flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-all',
         isActive
           ? 'bg-primary font-semibold text-primary-foreground shadow-sm'
           : 'text-muted-foreground hover:bg-primary/10 hover:text-primary-strong',
@@ -139,21 +154,90 @@ function NavTab({ item, pathname }: { item: NavItem; pathname: string }) {
   )
 }
 
-export function AppNavbar() {
+/** แท็บแนวนอนในแถบเดียวกับโลโก้ — **ซ่อนบนจอแคบ** สลับไปที่ `MobileNavMenu` แทน */
+export function DesktopNavTabs() {
   const pathname = usePathname() ?? ''
 
   return (
-    /**
-     * **เลื่อนแนวนอนได้ ไม่ใช่บีบให้ตัวหนังสือตกบรรทัด** (แก้ 2026-09-15) — จอแคบกว่า
-     * ผลรวมความกว้างของทุกแท็บมีอยู่จริง (มือถือ) `justify-center` เฉยๆ ทำให้แท็บ
-     * แรกๆ โดนเบียดจนตัวอักษรตัดบรรทัดกลางคำ อ่านไม่รู้เรื่อง · เลื่อนดูแท็บที่เหลือได้
-     * แทน · `justify-start` บนจอแคบกัน bug ของ flexbox ที่ `justify-center` ร่วมกับ
-     * `overflow-x-auto` จะซ่อนเนื้อหาส่วนแรกไปเลื่อนกลับมาไม่ได้ในบางเบราว์เซอร์
-     */
-    <nav className="flex h-12 shrink-0 items-stretch justify-start gap-1 overflow-x-auto border-b bg-background px-2 shadow-sm sm:justify-center">
+    <div className="hidden items-center gap-1 overflow-x-auto sm:flex">
       {NAV_ITEMS.map((item) => (
-        <NavTab key={item.href} item={item} pathname={pathname} />
+        <DesktopNavTab key={item.href} item={item} pathname={pathname} />
       ))}
-    </nav>
+    </div>
+  )
+}
+
+function MobileNavRow({
+  item,
+  pathname,
+  onNavigate,
+}: {
+  item: NavItem
+  pathname: string
+  onNavigate: () => void
+}) {
+  const allowed = useAllowed(item)
+  if (!allowed) return null
+
+  const isActive = pathname.startsWith(item.activePrefix)
+
+  return (
+    <Link
+      href={item.href}
+      aria-current={isActive ? 'page' : undefined}
+      onClick={onNavigate}
+      className={cn(
+        'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors',
+        isActive
+          ? 'bg-primary font-semibold text-primary-foreground'
+          : 'text-foreground hover:bg-muted',
+      )}
+    >
+      <item.icon className="size-4.5" />
+      {item.label}
+    </Link>
+  )
+}
+
+/**
+ * ปุ่มสามขีด — **เฉพาะจอแคบ** (ผู้ใช้สั่ง 2026-09-29: "ถ้าเปิดในโทรศัพท์ ทำเป็น
+ * สามขีดที่กดแล้วขึ้นเมนู")
+ *
+ * `open` คุมเอง ไม่ปล่อยให้ popover จัดการตัวเอง — เพราะต้องปิดเองตอนกดลิงก์
+ * (เปลี่ยนหน้าแบบ client-side ไม่ทำให้ popover unmount ให้เอง)
+ */
+export function MobileNavMenu() {
+  const pathname = usePathname() ?? ''
+  const [open, setOpen] = useState(false)
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-9 shrink-0 sm:hidden"
+            aria-label="เมนู"
+          >
+            <Menu className="size-5" />
+          </Button>
+        }
+      />
+
+      <PopoverContent align="start" className="w-64">
+        <div className="flex flex-col gap-0.5">
+          {NAV_ITEMS.map((item) => (
+            <MobileNavRow
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              onNavigate={() => setOpen(false)}
+            />
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }

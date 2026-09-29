@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
+import { DesktopNavTabs, MobileNavMenu } from '@/components/layout/app-navbar'
 import { NotificationBell } from '@/components/layout/notification-bell'
 import { Button } from '@/components/ui/button'
 import { authApi, displayNameOf } from '@/features/auth/api'
@@ -49,14 +50,20 @@ export function AppHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center gap-3 border-b bg-background px-4 shadow-sm">
+    <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3 shadow-sm sm:gap-3 sm:px-4">
+      {/* สามขีด — เฉพาะจอแคบ ซ่อนตัวเองบนจอกว้าง (ดู `MobileNavMenu`) */}
+      <MobileNavMenu />
+
       <Link
         href={ROUTE_HOME}
-        className="flex items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-muted"
+        className="flex shrink-0 items-center gap-2 rounded-md px-1 py-1 transition-colors hover:bg-muted"
       >
         <PawPrint className="size-6 shrink-0 text-primary" />
         <span className="hidden text-sm font-semibold tracking-tight sm:inline">{APP_TITLE}</span>
       </Link>
+
+      {/* แท็บเมนูหลัก — เฉพาะจอกว้าง อยู่แถวเดียวกับโลโก้แทนที่จะแยกแถบ (ผู้ใช้ตัดสิน 2026-09-29) */}
+      <DesktopNavTabs />
 
       <div className="flex-1" />
 

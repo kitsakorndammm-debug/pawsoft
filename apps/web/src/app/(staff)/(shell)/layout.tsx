@@ -1,15 +1,18 @@
 import type { ReactNode } from 'react'
 
 import { AppHeader } from '@/components/layout/app-header'
-import { AppNavbar } from '@/components/layout/app-navbar'
 import { AppSider } from '@/components/layout/app-sider'
 import { SessionGuard } from '@/components/session-guard'
 
 /**
- * โครงของหน้าที่อยู่หลังล็อกอิน — header → navbar → (sider + เนื้อหา)
+ * โครงของหน้าที่อยู่หลังล็อกอิน — header (รวมเมนูหลักในตัว) → (sider + เนื้อหา)
  *
- * `h-screen` คู่กับ `overflow-hidden` ทำให้ header กับ navbar อยู่กับที่ แล้วเลื่อน
- * เฉพาะเนื้อหา — ไม่ใช่ทั้งหน้าเลื่อนจน header หายไป
+ * **เมนูหลักย้ายเข้าไปอยู่ในแถบเดียวกับ header แล้ว** (ผู้ใช้ตัดสิน 2026-09-29 —
+ * เดิมเป็น `AppNavbar` แยกอีกแถบ) จอกว้างเห็นเป็นแท็บในแถบเดียวกับโลโก้ จอแคบยุบ
+ * เป็นปุ่มสามขีด ดู `app-navbar.tsx`
+ *
+ * `h-screen` คู่กับ `overflow-hidden` ทำให้ header อยู่กับที่ แล้วเลื่อนเฉพาะเนื้อหา —
+ * ไม่ใช่ทั้งหน้าเลื่อนจน header หายไป
  *
  * **`AppSider` คืน `null` เองเมื่อหน้านั้นไม่มีเมนูข้าง** — layout ไม่ต้องรู้ว่าเมนูไหน
  * คู่กับ path ไหน · เพิ่มเมนูใหม่แล้วไม่ต้องแก้ไฟล์นี้
@@ -27,7 +30,6 @@ export default function ShellLayout({ children }: { children: ReactNode }) {
     <SessionGuard>
       <div className="flex h-screen flex-col">
         <AppHeader />
-        <AppNavbar />
         <div className="flex flex-1 overflow-hidden">
           <AppSider />
           <main className="flex-1 overflow-auto p-6">{children}</main>
