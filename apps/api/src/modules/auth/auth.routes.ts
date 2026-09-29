@@ -1,9 +1,9 @@
 import { Elysia, t } from 'elysia'
 import { ok } from '../../kit/response.ts'
-import { SESSION_COOKIE, getActorAllowingPasswordChange, tokenFrom } from '../../kit/actor.ts'
+import { SESSION_COOKIE, getActor, getActorAllowingPasswordChange, tokenFrom } from '../../kit/actor.ts'
 import { checkRateLimit, clientIpOf } from '../../kit/rate-limit.ts'
 import { refuseUnknownFields } from '../../kit/route-guard.ts'
-import { changePassword, login, logout, me } from './auth.service.ts'
+import { changePassword, login, logout, me, updateMyOtpEmail, verifyLoginOtp } from './auth.service.ts'
 
 /**
  * เข้าและออกจากระบบฝั่งหลังบ้าน
@@ -38,13 +38,16 @@ const SESSION_HOURS = 10
 const LOGIN_RATE_LIMIT = { limit: 10, windowMs: 5 * 60_000 }
 
 const LOGIN_FIELDS = new Set(['username', 'password'])
+const VERIFY_OTP_FIELDS = new Set(['pendingToken', 'code'])
 const CHANGE_PASSWORD_FIELDS = new Set(['newPassword'])
+const UPDATE_EMAIL_FIELDS = new Set(['email'])
 
 /** ไม่ส่ง id เป็น BigInt ออกไป — JSON แปลงไม่ได้ */
 const toWire = (u: {
   id: bigint
   username: string
   mustChangePassword: boolean
+  email: string | null
   role: { id: bigint; name: string }
   permissions: string[]
   employee: { id: bigint; firstName: string; lastName: string; nickname: string | null } | null
@@ -52,6 +55,7 @@ const toWire = (u: {
   id: Number(u.id),
   username: u.username,
   mustChangePassword: u.mustChangePassword,
+  email: u.email,
   role: { id: Number(u.role.id), name: u.role.name },
   permissions: u.permissions,
   employee: u.employee
@@ -77,14 +81,44 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
       // ตรวจก่อนแตะฐาน/hash เลย — โดนบล็อกแล้วไม่ต้องเสียงานฝั่งเซิร์ฟเวอร์เพิ่ม
       checkRateLimit(`login:${clientIpOf(request)}`, LOGIN_RATE_LIMIT)
 
-      const user = await login({
+      const outcome = await login({
         username: body.username,
         password: body.password,
         ip: ipOf(request),
         userAgent: uaOf(request),
       })
 
+      // **บัญชีนี้ตั้งอีเมลรับ OTP ไว้ — ยังไม่ได้ session จริง ไม่ตั้ง cookie**
+      // ฝั่งหน้าเว็บต้องพา `pendingToken` ไปกรอก OTP ต่อที่ `/login/verify-otp`
+      if (outcome.otpRequired) {
+        return ok({ otpRequired: true as const, pendingToken: outcome.pendingToken })
+      }
+
       // **token ไม่อยู่ใน response body** — ใส่ไว้จะทำให้ `httpOnly` ไม่มีความหมาย
+      cookie[SESSION_COOKIE]?.set({
+        ...COOKIE_BASE,
+        value: outcome.token,
+        maxAge: SESSION_HOURS * 3600,
+      })
+
+      return ok({ otpRequired: false as const, ...toWire(outcome) })
+    },
+    {
+      body: t.Object({ username: t.String(), password: t.String() }),
+      transform: refuseUnknownFields(LOGIN_FIELDS),
+    },
+  )
+
+  .post(
+    '/login/verify-otp',
+    async ({ body, request, cookie }) => {
+      const user = await verifyLoginOtp({
+        pendingToken: body.pendingToken,
+        code: body.code,
+        ip: ipOf(request),
+        userAgent: uaOf(request),
+      })
+
       cookie[SESSION_COOKIE]?.set({
         ...COOKIE_BASE,
         value: user.token,
@@ -94,8 +128,8 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
       return ok(toWire(user))
     },
     {
-      body: t.Object({ username: t.String(), password: t.String() }),
-      transform: refuseUnknownFields(LOGIN_FIELDS),
+      body: t.Object({ pendingToken: t.String(), code: t.String() }),
+      transform: refuseUnknownFields(VERIFY_OTP_FIELDS),
     },
   )
 
@@ -133,5 +167,24 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
     {
       body: t.Object({ newPassword: t.String() }),
       transform: refuseUnknownFields(CHANGE_PASSWORD_FIELDS),
+    },
+  )
+
+  /**
+   * แก้อีเมลรับ OTP ของตัวเอง — **ใช้ `getActor` ธรรมดา ไม่ใช่ `getActorAllowingPasswordChange`**
+   * บัญชีที่ยังค้างเปลี่ยนรหัสทำได้อย่างเดียวคือเปลี่ยนรหัส ตรงกับที่เส้นอื่นทั้งระบบเป็น
+   */
+  .patch(
+    '/email',
+    async (ctx) => {
+      const actor = await getActor(ctx)
+
+      await updateMyOtpEmail(actor.userId, ctx.body.email)
+
+      return ok(toWire(await me(tokenFrom(ctx))))
+    },
+    {
+      body: t.Object({ email: t.Union([t.String(), t.Null()]) }),
+      transform: refuseUnknownFields(UPDATE_EMAIL_FIELDS),
     },
   )

@@ -71,12 +71,19 @@ async function requireRole(roleId: bigint, at: Tx | Db): Promise<void> {
   if (!role) throw notFound('ไม่พบบทบาทนี้', { roleId: String(roleId) })
 }
 
-/** พนักงานเจ้าของบัญชีต้องมีอยู่จริงและยังไม่ถูกลบ — ด้วยเหตุผลเดียวกับบทบาท */
-async function requireEmployee(employeeId: bigint, at: Tx | Db): Promise<void> {
+/**
+ * พนักงานเจ้าของบัญชีต้องมีอยู่จริงและยังไม่ถูกลบ — ด้วยเหตุผลเดียวกับบทบาท
+ *
+ * **คืนแถวกลับไปด้วย** — `createUser` ใช้ `email` ของมันเป็นค่าเริ่มต้นของอีเมลรับ OTP
+ * ไม่ต้อง query ซ้ำ
+ */
+async function requireEmployee(employeeId: bigint, at: Tx | Db) {
   const employee = await at.employee.findFirst({
     where: { id: employeeId, deletedAt: null },
   })
   if (!employee) throw notFound('ไม่พบพนักงานคนนี้', { employeeId: String(employeeId) })
+
+  return employee
 }
 
 export type CreateUserInput = {
@@ -125,7 +132,7 @@ export async function createUser(
   try {
     const user = await inTx(outerTx, async (tx) => {
       await requireRole(input.roleId, tx)
-      if (input.employeeId != null) await requireEmployee(input.employeeId, tx)
+      const employee = input.employeeId != null ? await requireEmployee(input.employeeId, tx) : null
 
       const created = await tx.user.create({
         data: {
@@ -133,6 +140,9 @@ export async function createUser(
           passwordHash,
           roleId: input.roleId,
           employeeId: input.employeeId ?? null,
+          // อีเมลรับ OTP เริ่มต้นจากอีเมลพนักงาน (ผู้ใช้ตัดสิน 2026-09-18) — จากนั้น
+          // แยกจากกันอิสระ เจ้าของบัญชีไปแก้เองที่หน้า "ข้อมูลส่วนตัว" ได้ต่างหาก
+          email: employee?.email ?? null,
           createdBy: actorId,
           updatedBy: actorId,
         },

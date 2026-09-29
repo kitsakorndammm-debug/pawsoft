@@ -35,6 +35,28 @@ export function useLogin() {
   return useMutation({
     mutationFn: ({ username, password }: { username: string; password: string }) =>
       authApi.login(username, password),
+    onSuccess: (result) => {
+      // `otpRequired: true` ยังไม่มีเซสชันจริง — ยังไม่มีอะไรให้ `/api/auth/me` เปลี่ยน
+      if (!result.otpRequired) void qc.invalidateQueries({ queryKey: ME_QUERY_KEY })
+    },
+  })
+}
+
+export function useVerifyLoginOtp() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ pendingToken, code }: { pendingToken: string; code: string }) =>
+      authApi.verifyLoginOtp(pendingToken, code),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ME_QUERY_KEY }),
+  })
+}
+
+export function useUpdateOtpEmail() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: (email: string | null) => authApi.updateOtpEmail(email),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ME_QUERY_KEY }),
   })
 }

@@ -11,6 +11,8 @@ export const ROUTE_CHANGE_PASSWORD = '/change-password'
 export const ROUTE_HOME = '/'
 export const ROUTE_USERS = '/settings/users'
 export const ROUTE_ROLES = '/settings/roles'
+/** ข้อมูลส่วนตัวของบัญชีที่ล็อกอินอยู่ — ตอนนี้มีแค่อีเมลรับ OTP */
+export const ROUTE_PROFILE = '/profile'
 
 // ---- ฝั่งเจ้าของสัตว์ ----
 export const ROUTE_OWNER_LOGIN = '/owner/login'

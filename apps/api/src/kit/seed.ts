@@ -120,8 +120,30 @@ async function ensureAdminUser(systemUserId: bigint): Promise<void> {
   })
 }
 
+/**
+ * เติมอีเมลรับ OTP ให้บัญชีเก่าที่มีอีเมลพนักงานอยู่แล้ว (ผู้ใช้ตัดสิน 2026-09-18)
+ *
+ * **ทำครั้งเดียวจริง ๆ ต่อบัญชี** — เงื่อนไข `email: null` ทำให้รันซ้ำทุกครั้งที่บูต
+ * โดยไม่มีผลอะไรเพิ่มหลังจากเติมแล้วรอบแรก (idempotent เหมือน seed อื่น) หลังจากนี้
+ * `user.email` กับ `employee.email` แยกจากกันอิสระ ไม่ sync ซ้ำอีก
+ */
+async function backfillOtpEmailFromEmployee(): Promise<void> {
+  const rows = await db.user.findMany({
+    where: { email: null, employeeId: { not: null } },
+    select: { id: true, employee: { select: { email: true } } },
+  })
+
+  for (const row of rows) {
+    const email = row.employee?.email
+    if (!email) continue
+
+    await db.user.update({ where: { id: row.id }, data: { email } })
+  }
+}
+
 export async function seed(): Promise<void> {
   await syncPermissions()
   const systemUserId = await ensureSystemUser()
   await ensureAdminUser(systemUserId)
+  await backfillOtpEmailFromEmployee()
 }

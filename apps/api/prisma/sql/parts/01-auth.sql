@@ -79,6 +79,13 @@ ALTER TABLE "user" DROP CONSTRAINT IF EXISTS user_username_not_blank_check;
 ALTER TABLE "user" ADD CONSTRAINT user_username_not_blank_check
   CHECK (btrim(username) <> '');
 
+COMMENT ON COLUMN "user".email IS 'อีเมลสำหรับรับ OTP ตอนล็อกอิน คนละอันกับ employee.email';
+
+-- อีเมลต้องมีรูปเป็นอีเมลถ้ากรอกมา — ว่างได้ (ยังไม่บังคับ OTP จนกว่าจะตั้งเอง)
+ALTER TABLE "user" DROP CONSTRAINT IF EXISTS user_email_shape_check;
+ALTER TABLE "user" ADD CONSTRAINT user_email_shape_check
+  CHECK (email IS NULL OR email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$');
+
 -- ============================================================================
 -- user_session
 -- ============================================================================
@@ -98,6 +105,31 @@ ALTER TABLE user_session ADD CONSTRAINT user_session_token_hash_shape_check
 ALTER TABLE user_session DROP CONSTRAINT IF EXISTS user_session_expiry_after_creation_check;
 ALTER TABLE user_session ADD CONSTRAINT user_session_expiry_after_creation_check
   CHECK (expires_at > created_at);
+
+-- ============================================================================
+-- login_otp
+-- ============================================================================
+
+COMMENT ON TABLE login_otp IS 'OTP ระหว่างล็อกอิน — hard delete เท่านั้น ใช้ครั้งเดียวแล้วลบทิ้ง';
+COMMENT ON COLUMN login_otp.code_hash IS 'sha256 ของรหัส OTP 6 หลัก ไม่เก็บตัวจริง';
+COMMENT ON COLUMN login_otp.pending_token_hash IS 'sha256 ของ token ที่หน้าเว็บถือไว้ระหว่างรอกรอก OTP คนละตัวกับ session token';
+COMMENT ON COLUMN login_otp.attempts IS 'นับครั้งที่กรอกโค้ดผิด เกินเพดานแล้วต้องเริ่มล็อกอินใหม่';
+
+ALTER TABLE login_otp DROP CONSTRAINT IF EXISTS login_otp_code_hash_shape_check;
+ALTER TABLE login_otp ADD CONSTRAINT login_otp_code_hash_shape_check
+  CHECK (code_hash ~ '^[0-9a-f]{64}$');
+
+ALTER TABLE login_otp DROP CONSTRAINT IF EXISTS login_otp_pending_token_hash_shape_check;
+ALTER TABLE login_otp ADD CONSTRAINT login_otp_pending_token_hash_shape_check
+  CHECK (pending_token_hash ~ '^[0-9a-f]{64}$');
+
+ALTER TABLE login_otp DROP CONSTRAINT IF EXISTS login_otp_expiry_after_creation_check;
+ALTER TABLE login_otp ADD CONSTRAINT login_otp_expiry_after_creation_check
+  CHECK (expires_at > created_at);
+
+ALTER TABLE login_otp DROP CONSTRAINT IF EXISTS login_otp_attempts_check;
+ALTER TABLE login_otp ADD CONSTRAINT login_otp_attempts_check
+  CHECK (attempts >= 0);
 
 -- ============================================================================
 -- pet_owner_account

@@ -1,6 +1,7 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { db, inTx, type Tx } from '../../kit/db.ts'
 import { invalid, unauthorized } from '../../kit/app-error.ts'
+import { sendMail } from '../../kit/mailer.ts'
 import { permissionsOf } from '../../kit/permissions.ts'
 import { writeAudit } from '../../kit/audit.ts'
 
@@ -30,6 +31,15 @@ const TOKEN_BYTES = 32
 const MIN_PASSWORD_LENGTH = 6
 
 /**
+ * OTP ขั้นที่สองหลังรหัสผ่านผ่าน (ผู้ใช้ตัดสิน 2026-09-18) — **เฉพาะบัญชีที่ตั้ง
+ * `user.email` ไว้แล้ว** บัญชีที่ยังไม่ตั้งเข้าระบบด้วยรหัสผ่านอย่างเดียวได้ต่อไป
+ */
+const OTP_CODE_DIGITS = 6
+const OTP_EXPIRY_MS = 5 * 60_000
+/** กรอกผิดครบจำนวนนี้ → ต้องเริ่มกรอกชื่อผู้ใช้/รหัสผ่านใหม่ทั้งหมด */
+const OTP_MAX_ATTEMPTS = 5
+
+/**
  * hash ของ token ที่เก็บลงตาราง
  *
  * **sha256 ไม่ใช่ argon2 โดยตั้งใจ** — token คือสุ่ม 32 ไบต์อยู่แล้ว ไม่มีอะไรให้เดา
@@ -53,6 +63,8 @@ export type MeResult = {
   mustChangePassword: boolean
   role: { id: bigint; name: string }
   permissions: string[]
+  /** อีเมลรับ OTP ของบัญชีนี้ — `null` = ยังไม่ตั้ง (ล็อกอินด้วยรหัสผ่านอย่างเดียวได้ต่อไป) */
+  email: string | null
   /**
    * พนักงานเจ้าของบัญชี — `null` = บัญชีที่ไม่ได้ผูกกับใคร (เช่นบัญชี `system`)
    *
@@ -71,6 +83,17 @@ export type LoginInput = {
 export type LoginResult = MeResult & { token: string }
 
 /**
+ * ผลของ `login()` — **สองแบบ แยกด้วย `otpRequired`**
+ *
+ * `otpRequired: true` ยังไม่ได้ session จริง มีแค่ `pendingToken` ไปกรอก OTP ต่อที่
+ * `verifyLoginOtp` · `otpRequired: false` คือเข้าระบบจริงแล้ว (บัญชีนี้ไม่ได้ตั้ง
+ * OTP ไว้ หรือผ่าน `verifyLoginOtp` มาแล้ว) มี `token` ให้ตั้ง cookie ได้ทันที
+ */
+export type LoginOutcome =
+  | ({ otpRequired: false } & LoginResult)
+  | { otpRequired: true; pendingToken: string }
+
+/**
  * บันทึกความพยายามเข้าระบบหนึ่งครั้ง
  *
  * **เรียกนอกทรานแซกชันเสมอ** — บันทึกที่ล้มเหลวไปพร้อมกับการล็อกอินที่ล้มเหลว
@@ -78,7 +101,15 @@ export type LoginResult = MeResult & { token: string }
  */
 async function recordAttempt(input: {
   identifier: string
-  result: 'SUCCESS' | 'FAILED_NO_USER' | 'FAILED_PASSWORD' | 'FAILED_SUSPENDED' | 'FAILED_LOCKED' | 'LOGOUT'
+  result:
+    | 'SUCCESS'
+    | 'FAILED_NO_USER'
+    | 'FAILED_PASSWORD'
+    | 'FAILED_SUSPENDED'
+    | 'FAILED_LOCKED'
+    | 'LOGOUT'
+    | 'OTP_SENT'
+    | 'FAILED_OTP'
   userId?: bigint | null
   ip?: string | undefined
   userAgent?: string | undefined
@@ -139,6 +170,7 @@ async function describe(userId: bigint): Promise<MeResult> {
       id: true,
       username: true,
       mustChangePassword: true,
+      email: true,
       role: { select: { id: true, name: true, isSystem: true } },
       employee: {
         select: { id: true, firstName: true, lastName: true, nickname: true },
@@ -152,14 +184,76 @@ async function describe(userId: bigint): Promise<MeResult> {
     id: user.id,
     username: user.username,
     mustChangePassword: user.mustChangePassword,
+    email: user.email,
     role: { id: user.role.id, name: user.role.name },
     permissions: await permissionsOf(user.role.id, user.role.isSystem),
     employee: user.employee,
   }
 }
 
+/** สร้างเซสชันจริงหนึ่งอัน — ใช้ทั้งตอนไม่มี OTP และตอน `verifyLoginOtp` ผ่านแล้ว */
+async function createSession(
+  userId: bigint,
+  ip: string | undefined,
+  userAgent: string | undefined,
+): Promise<string> {
+  const token = randomBytes(TOKEN_BYTES).toString('hex')
+  const expiresAt = new Date(Date.now() + SESSION_HOURS * 60 * 60 * 1000)
+
+  await inTx(undefined, async (tx) => {
+    await tx.userSession.create({
+      data: {
+        userId,
+        tokenHash: hashToken(token),
+        expiresAt,
+        ip: ip ?? null,
+        userAgent: userAgent?.slice(0, 500) ?? null,
+      },
+    })
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { failedAttempts: 0, lastLoginAt: new Date() },
+    })
+  })
+
+  return token
+}
+
+const generateOtpCode = () =>
+  String(randomInt(0, 10 ** OTP_CODE_DIGITS)).padStart(OTP_CODE_DIGITS, '0')
+
 /**
- * เข้าสู่ระบบ
+ * ส่ง OTP ให้บัญชีที่ผ่านรหัสผ่านแล้ว แล้วคืน `pendingToken` ให้ฝั่งหน้าเว็บถือไว้
+ *
+ * **ลบของเก่าของบัญชีนี้ทิ้งก่อนสร้างใหม่เสมอ** — ล็อกอินซ้ำก่อนกรอก OTP รอบก่อนจบ
+ * ต้องทำให้ตัวเก่าใช้ไม่ได้ทันที ไม่ใช่ให้มีสองรหัสที่ใช้ได้พร้อมกัน
+ */
+async function issueLoginOtp(userId: bigint, email: string): Promise<string> {
+  const code = generateOtpCode()
+  const pendingToken = randomBytes(TOKEN_BYTES).toString('hex')
+
+  await db.loginOtp.deleteMany({ where: { userId } })
+  await db.loginOtp.create({
+    data: {
+      userId,
+      codeHash: hashToken(code),
+      pendingTokenHash: hashToken(pendingToken),
+      expiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
+    },
+  })
+
+  await sendMail({
+    to: email,
+    subject: 'รหัสยืนยันเข้าสู่ระบบ Paw Soft',
+    text: `รหัสยืนยันของคุณคือ ${code} — ใช้ได้ภายใน 5 นาที หากไม่ได้เป็นคนขอเข้าสู่ระบบ กรุณาละเว้นอีเมลนี้`,
+  })
+
+  return pendingToken
+}
+
+/**
+ * เข้าสู่ระบบ — ด่านที่หนึ่ง (ชื่อผู้ใช้ + รหัสผ่าน)
  *
  * **ทุกเหตุผลที่ล็อกอินไม่ผ่าน ตอบข้อความเดียวกันหมด** — ชื่อผู้ใช้ไม่มี · รหัสผิด ·
  * ถูกระงับ · ถูกล็อก · ข้อความที่ต่างกันคือแผนที่ให้คนที่กำลังไล่เดา ว่าเดาถูกไปแล้ว
@@ -169,8 +263,11 @@ async function describe(userId: bigint): Promise<MeResult> {
  * เมื่อไหร่ เวลาที่ใช้ตอบจะบอกได้ว่าบัญชีนั้นมีอยู่จริง
  *
  * ตัด `username` หัวท้าย แต่ **ไม่ตัดรหัสผ่าน** — ช่องว่างในรหัสอาจตั้งใจใส่
+ *
+ * **รหัสผ่านผ่านแล้วไม่ได้แปลว่าเข้าระบบจริง** — บัญชีที่ตั้ง `user.email` ไว้ต้องผ่าน
+ * `verifyLoginOtp` อีกขั้น (ผู้ใช้ตัดสิน 2026-09-18) ดู `LoginOutcome`
  */
-export async function login(input: LoginInput): Promise<LoginResult> {
+export async function login(input: LoginInput): Promise<LoginOutcome> {
   const username = input.username.trim()
   const { password } = input
 
@@ -182,7 +279,7 @@ export async function login(input: LoginInput): Promise<LoginResult> {
 
   const user = await db.user.findUnique({
     where: { username },
-    select: { id: true, passwordHash: true, suspendedAt: true, lockedAt: true },
+    select: { id: true, passwordHash: true, suspendedAt: true, lockedAt: true, email: true },
   })
 
   if (!user) {
@@ -233,25 +330,19 @@ export async function login(input: LoginInput): Promise<LoginResult> {
     throw REFUSE()
   }
 
-  const token = randomBytes(TOKEN_BYTES).toString('hex')
-  const expiresAt = new Date(Date.now() + SESSION_HOURS * 60 * 60 * 1000)
-
-  await inTx(undefined, async (tx) => {
-    await tx.userSession.create({
-      data: {
-        userId: user.id,
-        tokenHash: hashToken(token),
-        expiresAt,
-        ip: input.ip ?? null,
-        userAgent: input.userAgent?.slice(0, 500) ?? null,
-      },
+  if (user.email) {
+    const pendingToken = await issueLoginOtp(user.id, user.email)
+    await recordAttempt({
+      identifier: username,
+      result: 'OTP_SENT',
+      userId: user.id,
+      ip: input.ip,
+      userAgent: input.userAgent,
     })
+    return { otpRequired: true, pendingToken }
+  }
 
-    await tx.user.update({
-      where: { id: user.id },
-      data: { failedAttempts: 0, lastLoginAt: new Date() },
-    })
-  })
+  const token = await createSession(user.id, input.ip, input.userAgent)
 
   await recordAttempt({
     identifier: username,
@@ -261,7 +352,92 @@ export async function login(input: LoginInput): Promise<LoginResult> {
     userAgent: input.userAgent,
   })
 
-  return { ...(await describe(user.id)), token }
+  return { otpRequired: false, ...(await describe(user.id)), token }
+}
+
+export type VerifyLoginOtpInput = {
+  pendingToken: string
+  code: string
+  ip?: string | undefined
+  userAgent?: string | undefined
+}
+
+/**
+ * เข้าสู่ระบบ — ด่านที่สอง (กรอกรหัส OTP) เฉพาะบัญชีที่ตั้งอีเมลรับ OTP ไว้
+ *
+ * **ตอบข้อความเดียวกันไม่ว่าจะ token ไม่มี, หมดอายุ, หรือกรอกโค้ดผิดครบจำนวน** — ทั้งสาม
+ * กรณีจบด้วยการต้องกลับไปเริ่มที่ชื่อผู้ใช้/รหัสผ่านใหม่ ไม่มีประโยชน์ที่จะบอกรายละเอียด
+ * ต่างกัน · แต่ **กรอกผิดที่ยังไม่ครบเพดาน** บอกจำนวนที่เหลือได้ เพราะยังอยู่ในกระบวนการเดิม
+ */
+export async function verifyLoginOtp(input: VerifyLoginOtpInput): Promise<LoginResult> {
+  const pendingToken = input.pendingToken.trim()
+  const code = input.code.trim()
+
+  if (pendingToken.length === 0 || code.length === 0) {
+    throw invalid('กรุณากรอกรหัสยืนยัน')
+  }
+
+  const RESTART = () =>
+    unauthorized('รหัสยืนยันไม่ถูกต้องหรือหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง')
+
+  const otp = await db.loginOtp.findUnique({
+    where: { pendingTokenHash: hashToken(pendingToken) },
+    select: {
+      id: true,
+      userId: true,
+      codeHash: true,
+      expiresAt: true,
+      attempts: true,
+      user: { select: { username: true, suspendedAt: true, lockedAt: true } },
+    },
+  })
+
+  if (!otp || otp.expiresAt <= new Date()) {
+    if (otp) await db.loginOtp.delete({ where: { id: otp.id } })
+    throw RESTART()
+  }
+
+  // ตรวจซ้ำ — เผื่อผู้ดูแลระงับ/ล็อกบัญชีนี้ระหว่างที่รอกรอก OTP อยู่ (เหตุผลเดียวกับ `me()`)
+  if (otp.user.suspendedAt || otp.user.lockedAt) {
+    await db.loginOtp.delete({ where: { id: otp.id } })
+    throw RESTART()
+  }
+
+  if (hashToken(code) !== otp.codeHash) {
+    const attempts = otp.attempts + 1
+
+    await recordAttempt({
+      identifier: otp.user.username,
+      result: 'FAILED_OTP',
+      userId: otp.userId,
+      ip: input.ip,
+      userAgent: input.userAgent,
+    })
+
+    if (attempts >= OTP_MAX_ATTEMPTS) {
+      await db.loginOtp.delete({ where: { id: otp.id } })
+      throw RESTART()
+    }
+
+    await db.loginOtp.update({ where: { id: otp.id }, data: { attempts } })
+    throw unauthorized(`รหัสยืนยันไม่ถูกต้อง — เหลืออีก ${OTP_MAX_ATTEMPTS - attempts} ครั้ง`, {
+      attemptsRemaining: OTP_MAX_ATTEMPTS - attempts,
+    })
+  }
+
+  await db.loginOtp.delete({ where: { id: otp.id } })
+
+  const token = await createSession(otp.userId, input.ip, input.userAgent)
+
+  await recordAttempt({
+    identifier: otp.user.username,
+    result: 'SUCCESS',
+    userId: otp.userId,
+    ip: input.ip,
+    userAgent: input.userAgent,
+  })
+
+  return { ...(await describe(otp.userId)), token }
 }
 
 /**
@@ -368,6 +544,48 @@ export async function changePassword(userId: bigint, newPassword: string): Promi
       module: 'user',
       recordId: userId,
       after: { mustChangePassword: false },
+      userId,
+    })
+  })
+}
+
+const EMAIL_MAX = 255
+/** รูปเดียวกับ `user_email_shape_check` ใน `sql/parts/01-auth.sql` — เหตุผลเดียวกับ `employee.service.ts` */
+const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
+/**
+ * แก้อีเมลรับ OTP ของตัวเอง (ผู้ใช้ตัดสิน 2026-09-18) — **ไม่รับ `userId` จากผู้เรียก**
+ * เหตุผลเดียวกับ `changePassword`
+ *
+ * ว่างได้ (ล้างค่า = กลับไปล็อกอินด้วยรหัสผ่านอย่างเดียว ไม่ผ่าน OTP อีก) แต่กรอกมาแล้ว
+ * ต้องเป็นรูปอีเมลจริง — ตรวจซ้ำที่นี่ไม่งั้นเจอ CHECK ที่ฐานปฏิเสธเป็น 500
+ *
+ * **คนละอันกับ `employee.email`** — ไม่แตะตารางพนักงานเลย
+ */
+export async function updateMyOtpEmail(userId: bigint, rawEmail: string | null): Promise<void> {
+  const trimmed = rawEmail?.trim() ?? ''
+  const value = trimmed.length === 0 ? null : trimmed
+
+  if (value !== null) {
+    if (value.length > EMAIL_MAX) {
+      throw invalid(`อีเมลยาวเกิน ${EMAIL_MAX} ตัวอักษร`, { field: 'email' })
+    }
+    if (!EMAIL_SHAPE.test(value)) {
+      throw invalid('อีเมลไม่ถูกต้อง', { field: 'email', value })
+    }
+  }
+
+  await inTx(undefined, async (tx) => {
+    const before = await tx.user.findUnique({ where: { id: userId }, select: { email: true } })
+
+    await tx.user.update({ where: { id: userId }, data: { email: value, updatedBy: userId } })
+
+    await writeAudit(tx, {
+      action: 'user.update-otp-email',
+      module: 'user',
+      recordId: userId,
+      before: { email: before?.email ?? null },
+      after: { email: value },
       userId,
     })
   })

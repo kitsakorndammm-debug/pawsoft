@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { authApi, displayNameOf } from '@/features/auth/api'
 import { useMe } from '@/features/auth/hooks'
 import { getInitials } from '@/lib/format'
-import { ROUTE_HOME, ROUTE_LOGIN } from '@/lib/routes'
+import { ROUTE_HOME, ROUTE_LOGIN, ROUTE_PROFILE } from '@/lib/routes'
 
 const APP_TITLE = 'Paw Soft — คลินิกรักษาสัตว์'
 
@@ -69,7 +69,11 @@ export function AppHeader() {
 
       <NotificationBell />
 
-      <div className="flex items-center gap-2.5 rounded-full border border-border/70 bg-card py-1 pl-1 pr-1 sm:pr-3">
+      <Link
+        href={ROUTE_PROFILE}
+        title="ข้อมูลส่วนตัว"
+        className="flex items-center gap-2.5 rounded-full border border-border/70 bg-card py-1 pl-1 pr-1 transition-colors hover:bg-muted sm:pr-3"
+      >
         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
           {initials}
         </span>
@@ -77,7 +81,7 @@ export function AppHeader() {
           <span className="truncate text-xs font-semibold text-foreground">{displayName}</span>
           <span className="truncate text-[11px] text-muted-foreground">{me?.role.name}</span>
         </span>
-      </div>
+      </Link>
 
       <ConfirmDialog
         title="ออกจากระบบ"

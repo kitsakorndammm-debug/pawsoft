@@ -2,17 +2,19 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Eye, EyeOff, PawPrint } from 'lucide-react'
+import { Eye, EyeOff, MailCheck, PawPrint } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useLogin } from '@/features/auth/hooks'
+import { useLogin, useVerifyLoginOtp } from '@/features/auth/hooks'
+import type { SessionUser } from '@/features/auth/api'
 import { toErrorMessage } from '@/lib/api-client'
 import { ROUTE_CHANGE_PASSWORD, ROUTE_HOME } from '@/lib/routes'
 
 /**
- * เข้าสู่ระบบฝั่งพนักงาน
+ * เข้าสู่ระบบฝั่งพนักงาน — **สองขั้น** ถ้าบัญชีตั้งอีเมลรับ OTP ไว้ (ผู้ใช้ตัดสิน
+ * 2026-09-18) ไม่ได้ตั้งไว้ก็เข้าระบบได้ทันทีเหมือนเดิมทุกอย่าง
  *
  * **ต้องห่อด้วย `Suspense`** เพราะ `useSearchParams` อ่าน URL · ไม่ห่อแล้ว
  * `next build` จะพังทั้งหน้า ขณะที่ `next dev` กับ `typecheck` ยังเขียวอยู่ทั้งคู่
@@ -21,39 +23,113 @@ function LoginForm() {
   const router = useRouter()
   const params = useSearchParams()
   const login = useLogin()
+  const verifyOtp = useVerifyLoginOtp()
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [pendingToken, setPendingToken] = useState<string | null>(null)
+  const [code, setCode] = useState('')
 
-  const onSubmit = (e: React.FormEvent) => {
+  const goAfterLogin = (user: SessionUser) => {
+    if (user.mustChangePassword) {
+      router.replace(ROUTE_CHANGE_PASSWORD)
+
+      return
+    }
+
+    const next = params.get('next')
+    // **ต้องขึ้นต้นด้วย `/` เดียว** — `//evil.com` ผ่าน `startsWith('/')` ได้
+    // และกลายเป็นการพาผู้ใช้ออกไปเว็บอื่นทันทีหลังล็อกอินสำเร็จ
+    const safe = next && next.startsWith('/') && !next.startsWith('//') ? next : ROUTE_HOME
+
+    router.replace(safe)
+  }
+
+  const onSubmitCredentials = (e: React.FormEvent) => {
     e.preventDefault()
 
     login.mutate(
       { username, password },
       {
-        onSuccess: (user) => {
-          if (user.mustChangePassword) {
-            router.replace(ROUTE_CHANGE_PASSWORD)
+        onSuccess: (result) => {
+          if (result.otpRequired) {
+            setPendingToken(result.pendingToken)
 
             return
           }
 
-          const next = params.get('next')
-          // **ต้องขึ้นต้นด้วย `/` เดียว** — `//evil.com` ผ่าน `startsWith('/')` ได้
-          // และกลายเป็นการพาผู้ใช้ออกไปเว็บอื่นทันทีหลังล็อกอินสำเร็จ
-          const safe = next && next.startsWith('/') && !next.startsWith('//') ? next : ROUTE_HOME
-
-          router.replace(safe)
+          goAfterLogin(result)
         },
         onError: (err) => toast.error(toErrorMessage(err)),
       },
     )
   }
 
+  const onSubmitOtp = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pendingToken) return
+
+    verifyOtp.mutate(
+      { pendingToken, code },
+      {
+        onSuccess: goAfterLogin,
+        onError: (err) => toast.error(toErrorMessage(err)),
+      },
+    )
+  }
+
+  if (pendingToken) {
+    return (
+      <form
+        onSubmit={onSubmitOtp}
+        className="flex w-full flex-col gap-4 rounded-2xl border bg-card p-6 shadow-lg shadow-black/[0.03]"
+      >
+        <div className="flex flex-col gap-1">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <MailCheck className="size-5 text-primary-strong" />
+            กรอกรหัสยืนยัน
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            เราส่งรหัสยืนยัน 6 หลักไปที่อีเมลของคุณแล้ว — รหัสใช้ได้ภายใน 5 นาที
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="otp-code">
+            รหัสยืนยัน <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="otp-code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+          />
+        </div>
+
+        <Button type="submit" disabled={verifyOtp.isPending || code.trim().length === 0}>
+          {verifyOtp.isPending ? 'กำลังตรวจสอบ…' : 'ยืนยัน'}
+        </Button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setPendingToken(null)
+            setCode('')
+          }}
+          className="text-xs text-muted-foreground hover:underline"
+        >
+          กรอกชื่อผู้ใช้/รหัสผ่านใหม่
+        </button>
+      </form>
+    )
+  }
+
   return (
     <form
-      onSubmit={onSubmit}
+      onSubmit={onSubmitCredentials}
       className="flex w-full flex-col gap-4 rounded-2xl border bg-card p-6 shadow-lg shadow-black/[0.03]"
     >
       <div className="flex flex-col gap-1">

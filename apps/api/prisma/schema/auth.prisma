@@ -135,6 +135,17 @@ model User {
   employeeId BigInt?   @unique @map("employee_id")
   employee   Employee? @relation(fields: [employeeId], references: [id])
 
+  /// อีเมลสำหรับรับ OTP ตอนล็อกอิน — **คนละอันกับ `employee.email`** (ผู้ใช้ตัดสิน
+  /// 2026-09-18: "ให้มีสองช่อง") · อีเมลพนักงานแก้ได้เฉพาะแอดมิน/HR ที่หน้าพนักงาน
+  /// ส่วนอันนี้เจ้าของบัญชีแก้เองได้ที่หน้า "ข้อมูลส่วนตัว"
+  ///
+  /// ตอนเปิดบัญชีใหม่ที่ผูกกับพนักงาน คัดลอกมาจาก `employee.email` เป็นค่าเริ่มต้น
+  /// (กันบล็อกอินไม่ได้ตั้งแต่วันแรกเพราะช่องว่าง) จากนั้นทั้งสองช่องแยกจากกันอิสระ
+  ///
+  /// **ว่างได้** — บัญชีที่ยังไม่มีอีเมลนี้ (เช่น `admin` ที่ไม่ผูกพนักงาน หรือบัญชีเก่า
+  /// ก่อนมีฟีเจอร์นี้) ล็อกอินด้วยรหัสผ่านอย่างเดียวได้ต่อไป — ไม่บังคับ OTP จนกว่าจะตั้งเอง
+  email String? @db.VarChar(255)
+
   /// ระงับบัญชี — คู่ At/By บังคับให้มาด้วยกันด้วย CHECK ใน patch.sql
   ///
   /// มีผลทันที ไม่ใช่ตอนล็อกอินรอบหน้า — `me()` ตรวจซ้ำทุก request จึงเตะคนที่ถือ
@@ -170,6 +181,7 @@ model User {
 
   sessions  UserSession[]
   loginLogs LoginLog[]
+  loginOtps LoginOtp[]
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -225,6 +237,39 @@ model UserSession {
   @@index([userId])
   @@index([expiresAt])
   @@map("user_session")
+}
+
+/// OTP ระหว่างล็อกอิน — ขั้นที่สองหลังรหัสผ่านถูก (ผู้ใช้ตัดสิน 2026-09-18: "ใน 1 นาที
+/// ถ้า 3 ครั้งไม่ถูกต้อง" ของรหัสผ่านคือคนละเรื่อง — นี่คือ OTP ที่มาหลังรหัสผ่านผ่านแล้ว)
+///
+/// **hard delete เท่านั้น เหมือน `UserSession`** — ใช้ครั้งเดียวแล้วลบทิ้ง ไม่ใช่ประวัติ
+/// ที่ต้องเก็บไว้ดู
+///
+/// **`pendingTokenHash` คนละตัวกับ token ของ `UserSession`** — ยังไม่ผ่าน OTP จึงยังไม่มี
+/// สิทธิ์ถือ token ของเซสชันจริง ตัวนี้แค่พิสูจน์ว่า "คนที่กำลังกรอก OTP อยู่ตอนนี้ คือคน
+/// ที่เพิ่งกรอกรหัสผ่านถูกเมื่อกี้" เท่านั้น
+model LoginOtp {
+  id BigInt @id @default(autoincrement())
+
+  userId BigInt @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  /// sha256 ของรหัส OTP 6 หลัก — ไม่เก็บตัวจริง เหตุผลเดียวกับ `UserSession.tokenHash`
+  codeHash String @map("code_hash") @db.VarChar(64)
+
+  /// sha256 ของ token ที่หน้าเว็บถือไว้ระหว่างรอกรอก OTP
+  pendingTokenHash String @unique @map("pending_token_hash") @db.VarChar(64)
+
+  /// นับครั้งที่กรอกโค้ดผิด — เกินเพดานแล้วต้องเริ่มล็อกอินใหม่ทั้งกระบวนการ
+  attempts Int @default(0)
+
+  expiresAt DateTime @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("login_otp")
 }
 
 /// บัญชีเจ้าของสัตว์ — ฝั่งลูกค้า
@@ -334,11 +379,9 @@ enum LoginResultKind {
   FAILED_SUSPENDED
   FAILED_LOCKED
   LOGOUT
-
-  /// **ยังไม่มีโค้ดฝั่ง `main` เขียนค่านี้** — เหลือจากงาน OTP/2FA ที่พักไว้บน branch
-  /// `otp-pending` (ยังไม่ merge) เก็บไว้ในสคีมาแทนการลบ เพื่อไม่ต้องแก้ enum ที่ฐาน
-  /// จริงสองรอบเมื่อ merge งานนั้นในอนาคต — ไม่กระทบอะไรตอนนี้เพราะไม่มีแถวไหนใช้ค่านี้
+  /// รหัสผ่านผ่านแล้ว ส่ง OTP ไปแล้ว — ยังไม่ใช่ `SUCCESS` จนกว่าจะยืนยัน OTP ผ่าน
   OTP_SENT
+  /// กรอกโค้ด OTP ผิด หรือหมดอายุ
   FAILED_OTP
 
   @@map("login_result_kind")
