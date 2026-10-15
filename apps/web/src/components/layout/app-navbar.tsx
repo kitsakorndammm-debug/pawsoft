@@ -154,16 +154,22 @@ function DesktopNavTab({ item, pathname }: { item: NavItem; pathname: string }) 
   )
 }
 
-/** แท็บแนวนอนในแถบเดียวกับโลโก้ — **ซ่อนบนจอแคบ** สลับไปที่ `MobileNavMenu` แทน */
+/**
+ * แท็บแนวนอนในแถบเดียวกับโลโก้ — **ซ่อนบนจอแคบ** สลับไปที่ `MobileNavMenu` แทน
+ *
+ * **ต้องเป็น `<nav>` ไม่ใช่ `<div>` เฉยๆ** — ตอนรวมเข้า header (2026-09-29) หลุด
+ * landmark นี้ไปโดยไม่ตั้งใจ ทั้ง screen reader และเทส e2e ที่หา
+ * `getByRole('navigation')` ต้องพึ่ง role นี้ (พังจริง พบตอนรันชุดทดสอบ 2026-10-16)
+ */
 export function DesktopNavTabs() {
   const pathname = usePathname() ?? ''
 
   return (
-    <div className="hidden items-center gap-1 overflow-x-auto sm:flex">
+    <nav aria-label="เมนูหลัก" className="hidden items-center gap-1 overflow-x-auto sm:flex">
       {NAV_ITEMS.map((item) => (
         <DesktopNavTab key={item.href} item={item} pathname={pathname} />
       ))}
-    </div>
+    </nav>
   )
 }
 
@@ -227,7 +233,7 @@ export function MobileNavMenu() {
       />
 
       <PopoverContent align="start" className="w-64">
-        <div className="flex flex-col gap-0.5">
+        <nav aria-label="เมนูหลัก" className="flex flex-col gap-0.5">
           {NAV_ITEMS.map((item) => (
             <MobileNavRow
               key={item.href}
@@ -236,7 +242,7 @@ export function MobileNavMenu() {
               onNavigate={() => setOpen(false)}
             />
           ))}
-        </div>
+        </nav>
       </PopoverContent>
     </Popover>
   )
