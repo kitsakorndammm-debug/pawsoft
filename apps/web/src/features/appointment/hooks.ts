@@ -158,5 +158,6 @@ export function useMySlots(date?: string) {
     queryKey: ['my', 'slots', date ?? null],
     queryFn: () => appointmentApi.mySlots(date),
     staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 }

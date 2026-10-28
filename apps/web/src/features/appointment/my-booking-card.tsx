@@ -4,6 +4,24 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 import { APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_STYLE, SLOT_LABEL, type AppointmentRow } from './api'
+import { useMySlots } from './hooks'
+
+/**
+ * แสดงเฉพาะคิวของ**ช่วงที่จองไว้**ตัวเอง — ไม่ใช่ทุกช่วงของวันนั้น (ผู้ใช้ตัดสิน)
+ * ช่วยกะเวลาว่าจะออกจากบ้านตอนไหน เลยต้องเห็นเฉพาะใบที่ยืนยันแล้ว (`BOOKED`)
+ * ใบที่ยังรอเจ้าหน้าที่ยืนยัน (`PENDING`) ยังไม่ใช่คิวจริงให้เทียบ
+ */
+function ArrivalProgress({ bookedOn, slot }: { bookedOn: string; slot: AppointmentRow['slot'] }) {
+  const slots = useMySlots(bookedOn)
+  const occ = slots.data?.occupancy.find((o) => o.slot === slot)
+  if (!occ) return null
+
+  return (
+    <p className="text-xs text-muted-foreground">
+      คิวตอนนี้ — มาถึงแล้ว {occ.arrived}/{occ.capacity}
+    </p>
+  )
+}
 
 /**
  * ใบจองหนึ่งใบบนจอลูกค้า
@@ -41,6 +59,7 @@ export function MyBookingCard({
           {row.displayName}
           {row.reason ? ` · ${row.reason}` : ''}
         </p>
+        {row.status === 'BOOKED' ? <ArrivalProgress bookedOn={row.bookedOn} slot={row.slot} /> : null}
       </div>
 
       <span
