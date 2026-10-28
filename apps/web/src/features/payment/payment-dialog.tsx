@@ -3,8 +3,8 @@
 import {
   Ban,
   Banknote,
-  CreditCard,
   FileText,
+  Mail,
   Paperclip,
   Pill,
   QrCode,
@@ -46,6 +46,7 @@ import {
   useInvoiceByVisit,
   useInvoiceQr,
   useIssueInvoice,
+  useNotifyOwner,
   usePromptPayStatus,
   useRemovePayment,
   useSubmitInvoice,
@@ -97,6 +98,7 @@ export function PaymentDialog({
   const submit = useSubmitInvoice()
   const removePayment = useRemovePayment()
   const voidInvoice = useVoidInvoice()
+  const notifyOwner = useNotifyOwner()
 
   const [discount, setDiscount] = useState('')
   const [pendingRemove, setPendingRemove] = useState<number | null>(null)
@@ -325,6 +327,25 @@ export function PaymentDialog({
             ) : null}
 
             {/*
+              **แจ้งลูกค้าให้จ่ายออนไลน์เอง** (ผู้ใช้ตัดสิน 2026-10-28) — เช็คยอดแล้ว
+              ส่งอีเมลได้เลย ไม่ต้องรอเก็บเงินครบก่อน · BE ปฏิเสธเองถ้าลูกค้ายังไม่ได้
+              ผูกบัญชีเว็บ ปุ่มจึงไม่ต้องรู้เรื่องนั้นล่วงหน้า
+            */}
+            {invoice && editable && canCollect && !settled ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={notifyOwner.isPending}
+                onClick={() =>
+                  void run(() => notifyOwner.mutateAsync(invoice.id), 'ส่งอีเมลแจ้งลูกค้าแล้ว')
+                }
+              >
+                <Mail className="size-4" />
+                แจ้งลูกค้าให้จ่ายออนไลน์
+              </Button>
+            ) : null}
+
+            {/*
               **ชื่อปุ่มคงที่เสมอ ไม่เปลี่ยนเป็นป้ายบอกสถานะ** (ผู้ใช้ทักท้วง 2026-09-01:
               "ทำไมปุ่มบันทึกมีสองที่ อะไรยังไงแน่")
 
@@ -502,8 +523,7 @@ function PaymentList({
     )
   }
 
-  const icon = (m: PaymentMethod) =>
-    m === 'CASH' ? Banknote : m === 'PROMPTPAY' ? QrCode : m === 'CARD' ? CreditCard : Paperclip
+  const icon = (m: PaymentMethod) => (m === 'CASH' ? Banknote : m === 'PROMPTPAY' ? QrCode : Paperclip)
 
   return (
     <div className="divide-y rounded-md border">
@@ -602,8 +622,10 @@ function AddPaymentBox({
    * ไม่มี `TRANSFER` — เคาน์เตอร์รับโอนผ่านพร้อมเพย์อยู่แล้ว (สแกนแล้วจบในตัว)
    * ส่วนเคสที่เจ้าของสัตว์ไม่ได้มาเอง โอนเองจากแอปฝั่งลูกค้าได้โดยตรง ไม่ต้องผ่านเคาน์เตอร์
    * (ผู้ใช้ตัดสิน 2026-09-08)
+   *
+   * **ไม่มี `CARD`** — คลินิกไม่มีเครื่องรูดบัตรที่เคาน์เตอร์ (ผู้ใช้ตัดสิน 2026-10-28)
    */
-  const methods: PaymentMethod[] = ['PROMPTPAY', 'CASH', 'CARD']
+  const methods: PaymentMethod[] = ['PROMPTPAY', 'CASH']
 
   async function submitPayment() {
     // ยอดมาจากใบเสมอ — ไม่ใช่จากช่องที่คนพิมพ์
@@ -636,7 +658,7 @@ function AddPaymentBox({
       <div className="flex items-end gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <Label>วิธีจ่าย</Label>
-          <div className="grid grid-cols-4 gap-1">
+          <div className="grid grid-cols-2 gap-1">
             {methods.map((m) => {
               const disabled = m === 'PROMPTPAY' && !promptPayReady
 

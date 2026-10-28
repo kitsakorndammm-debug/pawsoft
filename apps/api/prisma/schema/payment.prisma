@@ -139,7 +139,6 @@ enum PaymentMethod {
   CASH
   PROMPTPAY
   TRANSFER
-  CARD
 
   @@map("payment_method")
 }

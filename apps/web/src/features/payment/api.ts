@@ -25,13 +25,12 @@ export const INVOICE_STATUS_STYLE: Record<InvoiceStatus, string> = {
   VOID: 'bg-muted text-muted-foreground ring-1 ring-border',
 }
 
-export type PaymentMethod = 'CASH' | 'PROMPTPAY' | 'TRANSFER' | 'CARD'
+export type PaymentMethod = 'CASH' | 'PROMPTPAY' | 'TRANSFER'
 
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   CASH: 'เงินสด',
   PROMPTPAY: 'พร้อมเพย์',
   TRANSFER: 'โอน',
-  CARD: 'บัตร',
 }
 
 /**
@@ -178,6 +177,9 @@ export const invoiceApi = {
   },
 
   removePayment: (paymentId: number) => api.delete<null>(`/api/invoices/payments/${paymentId}`),
+
+  /** แจ้งลูกค้าทางอีเมลว่าจ่ายออนไลน์ได้แล้ว — ไม่เปลี่ยนสถานะใบ */
+  notifyOwner: (id: number) => api.post<null>(`/api/invoices/${id}/notify-owner`, {}),
 
   submit: (id: number) => api.patch<Invoice>(`/api/invoices/${id}/submit`, {}),
   verify: (id: number) => api.patch<Invoice>(`/api/invoices/${id}/verify`, {}),

@@ -41,6 +41,12 @@ const PATCH_OWNED = [
   // FK คู่ของ `pet` พิง unique `(id, species_id)` ของ `breed` — ดู `05-owner.sql`
   'ALTER TABLE pet DROP CONSTRAINT IF EXISTS pet_breed_matches_species_fk',
   'ALTER TABLE breed DROP CONSTRAINT IF EXISTS breed_id_species_key',
+  // CHECK ที่อ้างอิง enum `payment_method` — Prisma แก้ enum ไม่ผ่านถ้า CHECK พวกนี้
+  // ยังพิง literal ของ type เดิมอยู่ (เจอจริง 2026-10-28 ตอนตัด `CARD` ออก) ·
+  // ดู `07-payment.sql`
+  'ALTER TABLE payment DROP CONSTRAINT IF EXISTS payment_slip_method_check',
+  'ALTER TABLE payment DROP CONSTRAINT IF EXISTS payment_promptpay_ref_check',
+  'ALTER TABLE payment DROP CONSTRAINT IF EXISTS payment_owner_method_check',
 ]
 
 const { PrismaPg } = await import('@prisma/adapter-pg')

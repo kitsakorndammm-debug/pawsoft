@@ -2,6 +2,7 @@ import { forbidden, invalid, notFound } from '../../kit/app-error.ts'
 import { writeAudit } from '../../kit/audit.ts'
 import { db, inTx, type Db, type Tx } from '../../kit/db.ts'
 import { duplicateIndexOf } from '../../kit/duplicate.ts'
+import { sendMail } from '../../kit/mailer.ts'
 import { cleanOptional } from '../../kit/text.ts'
 import { getVisitBill } from '../visit/visit-item.service.ts'
 import { getPromptPaySettings } from './promptpay.config.ts'
@@ -432,6 +433,56 @@ export async function submitInvoice(
     })
 
     return updated
+  })
+}
+
+/**
+ * เคาน์เตอร์เช็คยอดแล้วแจ้งลูกค้าว่าจ่ายออนไลน์ได้แล้ว — **แค่ส่งอีเมล ไม่เปลี่ยนสถานะใบ**
+ *
+ * (ผู้ใช้ตัดสิน 2026-10-28: "รักษาเสร็จแล้วพนักงานเช็คค่ารักษาก่อน จากนั้นกดส่งไปให้
+ * ลูกค้า" — ลูกค้ายังสแกนจ่ายเองที่บ้านได้ตามปกติผ่าน `/api/my/invoices` · ขั้นตอน
+ * ตรวจของบัญชี (`submitInvoice`/`verifyInvoice`) ไม่เปลี่ยนเลย)
+ *
+ * **ส่งได้เฉพาะลูกค้าที่ผูกบัญชีเว็บแล้ว** — ไม่มีบัญชีก็ไม่มีที่ให้ล็อกอินไปจ่าย
+ * ส่งอีเมลไปก็ไม่มีประโยชน์ · ไปผูกบัญชีให้ก่อนที่หน้าทะเบียนเจ้าของสัตว์
+ */
+export async function sendInvoiceToOwner(
+  id: bigint,
+  actorId: bigint,
+  outerTx?: Tx,
+): Promise<void> {
+  const at = outerTx ?? db
+  const inv = await findInvoice(id, outerTx)
+  requireEditable(inv)
+
+  const visit = await at.visit.findUniqueOrThrow({
+    where: { id: inv.visitId },
+    select: {
+      owner: { select: { petOwnerAccount: { select: { email: true, displayName: true } } } },
+    },
+  })
+
+  const account = visit.owner?.petOwnerAccount
+  if (!account) {
+    throw invalid('ลูกค้ายังไม่ได้ผูกบัญชีเว็บ ส่งอีเมลไม่ได้', { field: 'ownerId' })
+  }
+
+  await sendMail({
+    to: account.email,
+    subject: `ใบเสร็จ ${inv.code} พร้อมชำระแล้ว — Paw Soft`,
+    text:
+      `เรียนคุณ${account.displayName}\n\n` +
+      `ใบเสร็จเลขที่ ${inv.code} ยอด ${inv.total.toFixed(2)} บาท พร้อมให้ชำระแล้ว ` +
+      `กรุณาเข้าสู่ระบบที่แอป Paw Soft แล้วไปที่เมนู "ใบเสร็จของฉัน" เพื่อสแกนจ่ายได้เลย\n\n` +
+      `ขอบคุณที่ใช้บริการค่ะ`,
+  })
+
+  await writeAudit(at, {
+    action: `${MODULE}.notify-owner`,
+    module: MODULE,
+    recordId: id,
+    after: { to: account.email },
+    userId: actorId,
   })
 }
 

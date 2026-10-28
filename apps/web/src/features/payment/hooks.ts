@@ -145,6 +145,11 @@ export function useRemovePayment() {
   })
 }
 
+/** แจ้งลูกค้าทางอีเมล — ไม่แก้ข้อมูลใบเสร็จ จึงไม่ต้อง invalidate */
+export function useNotifyOwner() {
+  return useMutation({ mutationFn: (id: number) => invoiceApi.notifyOwner(id) })
+}
+
 export function useSubmitInvoice() {
   const invalidate = useInvalidate()
 

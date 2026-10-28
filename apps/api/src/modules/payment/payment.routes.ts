@@ -27,6 +27,7 @@ import {
   rejectInvoice,
   removePayment,
   requireOwnInvoice,
+  sendInvoiceToOwner,
   submitInvoice,
   verifyInvoice,
   voidInvoice,
@@ -120,7 +121,6 @@ const methodSchema = t.Union([
   t.Literal('CASH'),
   t.Literal('PROMPTPAY'),
   t.Literal('TRANSFER'),
-  t.Literal('CARD'),
 ])
 
 /**
@@ -153,8 +153,8 @@ function readSlipForm(body: unknown): {
   if (!(file instanceof File)) throw invalid('ต้องแนบไฟล์สลิปมาด้วย', { field: 'file' })
 
   const method = form['method']
-  if (method !== 'PROMPTPAY' && method !== 'TRANSFER' && method !== 'CARD') {
-    throw invalid('แนบสลิปได้เฉพาะการโอน พร้อมเพย์ หรือบัตร', { field: 'method' })
+  if (method !== 'PROMPTPAY' && method !== 'TRANSFER') {
+    throw invalid('แนบสลิปได้เฉพาะการโอนหรือพร้อมเพย์', { field: 'method' })
   }
 
   const amount = form['amount']
@@ -428,6 +428,21 @@ export const invoiceRoutes = new Elysia({ prefix: '/api/invoices' })
     {
       transform: guardBillingCollect,
       detail: { tags: ['การเงิน'], summary: 'ส่งยอดให้บัญชี' },
+    },
+  )
+
+  /** เคาน์เตอร์เช็คยอดแล้วส่งอีเมลแจ้งลูกค้าว่าจ่ายออนไลน์ได้แล้ว — ไม่เปลี่ยนสถานะใบ */
+  .post(
+    '/:id/notify-owner',
+    async ({ params, ...ctx }) => {
+      const actor = await getActor(ctx)
+      await sendInvoiceToOwner(parseId(params.id), actor.userId)
+
+      return ok(null)
+    },
+    {
+      transform: guardBillingCollect,
+      detail: { tags: ['การเงิน'], summary: 'แจ้งลูกค้าทางอีเมลให้จ่ายออนไลน์' },
     },
   )
 
