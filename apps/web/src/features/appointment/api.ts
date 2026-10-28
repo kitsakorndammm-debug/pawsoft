@@ -83,6 +83,24 @@ export type AppointmentDailyCounts = {
   days: { bookedOn: string; count: number }[]
 }
 
+/**
+ * ความหนาแน่นของช่วงเวลาหนึ่งในวันเดียว — `booked` คือจำนวนที่ยังกันเพดานไว้
+ * (คนที่ยังไม่มาถึง) ส่วน `arrived` คือเช็กอินแล้วจริง สองค่านี้บวกกันถึงจะได้
+ * "จองไว้ทั้งหมดกี่คน" ของช่วงนั้น
+ */
+export type SlotOccupancy = {
+  slot: AppointmentSlot
+  capacity: number
+  booked: number
+  arrived: number
+}
+
+export type SlotsResult = {
+  slots: AppointmentSlot[]
+  today: string
+  occupancy: SlotOccupancy[]
+}
+
 export const appointmentApi = {
   list: (input: {
     bookedOn: string | null
@@ -100,9 +118,13 @@ export const appointmentApi = {
     return api.getPaged<AppointmentRow>(`/api/appointments?${search.toString()}`)
   },
 
-  /** ช่วงเวลาและ "วันนี้" จาก BE — **ไม่คำนวณวันนี้เองในเบราว์เซอร์** */
-  slots: () =>
-    api.get<{ slots: AppointmentSlot[]; today: string }>('/api/appointments/slots'),
+  /**
+   * ช่วงเวลาและ "วันนี้" จาก BE — **ไม่คำนวณวันนี้เองในเบราว์เซอร์**
+   *
+   * ส่ง `date` ไปด้วยถึงจะได้ `occupancy` ของวันนั้น — ไม่ส่งมา BE ใช้วันนี้ให้เอง
+   */
+  slots: (date?: string) =>
+    api.get<SlotsResult>(`/api/appointments/slots${date ? `?date=${date}` : ''}`),
 
   /** ใช้วาดมุมมองสัปดาห์/เดือน/ปี — `from`/`to` เป็น `YYYY-MM-DD` ทั้งคู่ */
   dailyCounts: (from: string, to: string) =>
@@ -116,8 +138,8 @@ export const appointmentApi = {
    * เส้นข้างบนการ์ดด้วย `reception:read` ซึ่งลูกค้าไม่มี · เรียกผิดเส้นจะได้ 401
    * เงียบ ๆ แล้ว `today` ว่าง ช่องวันที่ไม่ตั้งค่าเริ่มต้นให้ (แก้ 2026-09-01)
    */
-  mySlots: () =>
-    api.get<{ slots: AppointmentSlot[]; today: string }>('/api/my/slots'),
+  mySlots: (date?: string) =>
+    api.get<SlotsResult>(`/api/my/slots${date ? `?date=${date}` : ''}`),
 
   create: (body: AppointmentInput) => api.post<Appointment>('/api/appointments', body),
 

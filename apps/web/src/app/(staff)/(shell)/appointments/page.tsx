@@ -48,9 +48,9 @@ const VIEW_LABEL: Record<BoardView, string> = { day: 'วัน', week: 'สั�
  */
 function AppointmentBoard() {
   const canWrite = useCan(RECEPTION_WRITE)
-  const slots = useSlots()
 
   const [date, setDate] = useQueryState('date', { defaultValue: '', clearOnDefault: true })
+  const slots = useSlots(date || undefined)
   const activeDate = date || slots.data?.today || null
 
   /**
@@ -175,6 +175,8 @@ function AppointmentBoard() {
           <div className="grid gap-3 overflow-y-auto sm:grid-cols-2 xl:grid-cols-4">
             {SLOTS.map((slot) => {
               const inSlot = rows.filter((r) => r.slot === slot)
+              const occ = slots.data?.occupancy.find((o) => o.slot === slot)
+              const isFull = occ ? occ.booked >= occ.capacity : false
 
               return (
                 <section
@@ -184,15 +186,30 @@ function AppointmentBoard() {
                 >
                   <header className="flex items-center justify-between px-1">
                     <h2 className="text-sm font-medium text-primary-strong">{SLOT_LABEL[slot]}</h2>
-                    <span
-                      className={cn(
-                        'rounded px-1.5 py-0.5 text-xs',
-                        inSlot.length > 0
-                          ? 'bg-primary/10 text-primary-strong'
-                          : 'text-muted-foreground',
-                      )}
-                    >
-                      {inSlot.length} ราย
+                    <span className="flex items-center gap-1.5">
+                      {occ ? (
+                        <span
+                          className={cn(
+                            'rounded px-1.5 py-0.5 text-xs',
+                            isFull
+                              ? 'bg-destructive/10 text-destructive'
+                              : 'bg-muted text-muted-foreground',
+                          )}
+                        >
+                          {occ.booked + occ.arrived}/{occ.capacity}
+                          {occ.arrived > 0 ? ` · มาแล้ว ${occ.arrived}` : ''}
+                        </span>
+                      ) : null}
+                      <span
+                        className={cn(
+                          'rounded px-1.5 py-0.5 text-xs',
+                          inSlot.length > 0
+                            ? 'bg-primary/10 text-primary-strong'
+                            : 'text-muted-foreground',
+                        )}
+                      >
+                        {inSlot.length} ราย
+                      </span>
                     </span>
                   </header>
 

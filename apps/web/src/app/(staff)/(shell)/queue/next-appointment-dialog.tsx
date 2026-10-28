@@ -31,14 +31,16 @@ export function NextAppointmentDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const slots = useSlots()
   const book = useBookNextVisitAppointment()
 
   const [bookedOn, setBookedOn] = useState('')
   const [slot, setSlot] = useState<AppointmentSlot>('MORNING_1')
 
+  const slots = useSlots(bookedOn || undefined)
   const today = slots.data?.today ?? ''
   const date = bookedOn || today
+  const selectedSlotOcc = slots.data?.occupancy.find((o) => o.slot === slot)
+  const selectedSlotFull = selectedSlotOcc ? selectedSlotOcc.booked >= selectedSlotOcc.capacity : false
 
   function close(next: boolean) {
     if (!next) {
@@ -80,22 +82,40 @@ export function NextAppointmentDialog({
           <div className="flex flex-col gap-1.5">
             <Label>ช่วงเวลา</Label>
             <div className="grid grid-cols-2 gap-1.5">
-              {SLOTS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSlot(s)}
-                  className={cn(
-                    'rounded-md border px-2 py-2 text-xs transition-colors',
-                    slot === s
-                      ? 'border-primary bg-primary/10 font-medium'
-                      : 'border-input hover:bg-muted',
-                  )}
-                >
-                  {SLOT_LABEL[s]}
-                </button>
-              ))}
+              {SLOTS.map((s) => {
+                const occ = slots.data?.occupancy.find((o) => o.slot === s)
+                const reserved = occ ? occ.booked + occ.arrived : 0
+                const isFull = occ ? occ.booked >= occ.capacity : false
+
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={isFull}
+                    onClick={() => setSlot(s)}
+                    className={cn(
+                      'flex flex-col items-start gap-0.5 rounded-md border px-2 py-2 text-xs transition-colors',
+                      isFull
+                        ? 'cursor-not-allowed border-input bg-muted text-muted-foreground'
+                        : slot === s
+                          ? 'border-primary bg-primary/10 font-medium'
+                          : 'border-input hover:bg-muted',
+                    )}
+                  >
+                    <span>{SLOT_LABEL[s]}</span>
+                    {occ ? (
+                      <span className="text-[10px] text-muted-foreground">
+                        {isFull ? 'เต็มแล้ว' : `${reserved}/${occ.capacity}`}
+                        {occ.arrived > 0 ? ` · มาแล้ว ${occ.arrived}` : ''}
+                      </span>
+                    ) : null}
+                  </button>
+                )
+              })}
             </div>
+            {selectedSlotFull ? (
+              <p className="text-xs text-destructive">ช่วงนี้เต็มแล้ว เลือกช่วงอื่น</p>
+            ) : null}
           </div>
         </div>
 
@@ -103,7 +123,12 @@ export function NextAppointmentDialog({
           <Button type="button" variant="outline" onClick={() => close(false)}>
             ยกเลิก
           </Button>
-          <Button type="button" onClick={() => void submit()} loading={book.isPending} disabled={date === ''}>
+          <Button
+            type="button"
+            onClick={() => void submit()}
+            loading={book.isPending}
+            disabled={date === '' || selectedSlotFull}
+          >
             บันทึกการนัด
           </Button>
         </DialogFooter>

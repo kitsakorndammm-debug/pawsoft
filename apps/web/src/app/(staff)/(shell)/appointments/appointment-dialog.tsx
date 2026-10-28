@@ -46,7 +46,6 @@ export function AppointmentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const create = useCreateAppointment();
-  const slots = useSlots();
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [picked, setPicked] = useState<{
@@ -61,8 +60,11 @@ export function AppointmentDialog({
   const [slot, setSlot] = useState<AppointmentSlot>("MORNING_1");
   const [reason, setReason] = useState("");
 
+  const slots = useSlots(bookedOn || undefined);
   const today = slots.data?.today ?? "";
   const date = bookedOn || today;
+  const selectedSlotOcc = slots.data?.occupancy.find((o) => o.slot === slot);
+  const selectedSlotFull = selectedSlotOcc ? selectedSlotOcc.booked >= selectedSlotOcc.capacity : false;
 
   function close(next: boolean) {
     if (!next) {
@@ -78,6 +80,7 @@ export function AppointmentDialog({
   const canSubmit =
     picked !== null &&
     date !== "" &&
+    !selectedSlotFull &&
     (picked.petId !== null || petNameText.trim().length > 0);
 
   async function submit() {
@@ -191,22 +194,40 @@ export function AppointmentDialog({
                   พร้อมกันหมด ไม่ต้องกดเปิดถึงจะรู้ว่ามีอะไรให้เลือก
                 */}
                 <div className="grid grid-cols-2 gap-1.5">
-                  {SLOTS.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setSlot(s)}
-                      className={cn(
-                        'rounded-md border px-2 py-2 text-xs transition-colors',
-                        slot === s
-                          ? 'border-primary bg-primary/10 font-medium'
-                          : 'border-input hover:bg-muted',
-                      )}
-                    >
-                      {SLOT_LABEL[s]}
-                    </button>
-                  ))}
+                  {SLOTS.map((s) => {
+                    const occ = slots.data?.occupancy.find((o) => o.slot === s);
+                    const reserved = occ ? occ.booked + occ.arrived : 0;
+                    const isFull = occ ? occ.booked >= occ.capacity : false;
+
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        disabled={isFull}
+                        onClick={() => setSlot(s)}
+                        className={cn(
+                          'flex flex-col items-start gap-0.5 rounded-md border px-2 py-2 text-xs transition-colors',
+                          isFull
+                            ? 'cursor-not-allowed border-input bg-muted text-muted-foreground'
+                            : slot === s
+                              ? 'border-primary bg-primary/10 font-medium'
+                              : 'border-input hover:bg-muted',
+                        )}
+                      >
+                        <span>{SLOT_LABEL[s]}</span>
+                        {occ ? (
+                          <span className="text-[10px] text-muted-foreground">
+                            {isFull ? 'เต็มแล้ว' : `${reserved}/${occ.capacity}`}
+                            {occ.arrived > 0 ? ` · มาแล้ว ${occ.arrived}` : ''}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </div>
+                {selectedSlotFull ? (
+                  <p className="text-xs text-destructive">ช่วงนี้เต็มแล้ว เลือกช่วงอื่น</p>
+                ) : null}
               </div>
             </div>
 

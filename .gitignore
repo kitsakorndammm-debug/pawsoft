@@ -9,6 +9,8 @@ coverage/
 .env
 .env.*
 !.env.example
+# สำรองก่อนรีเซ็ต — เป็น JSON ดิบของชื่อ/เบอร์โทรลูกค้าจริง ไม่ควรหลุดเข้า git
+apps/api/prisma/backup-before-reset-*.json
 # ยกเว้นตัวนี้โดยตั้งใจ — ไม่ใช่ความลับของใคร แต่เป็นค่าที่ e2e ต้องเหมือนกันทุกเครื่อง
 # (ชี้ไปที่ API/ฐานข้อมูลของ e2e) · ถ้า ignore ไว้ คนที่ clone ใหม่จะรัน e2e ไม่ได้
 !apps/web/.env.production.local

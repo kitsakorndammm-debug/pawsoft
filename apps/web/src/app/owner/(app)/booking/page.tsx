@@ -36,7 +36,8 @@ export default function OwnerBookingPage() {
   const profile = useMyProfile()
   const linked = profile.data?.owner != null
   const pets = useMyPets(linked)
-  const slots = useMySlots()
+  const [bookedOn, setBookedOn] = useState('')
+  const slots = useMySlots(bookedOn || undefined)
   const create = useCreateMyAppointment()
 
   const [petId, setPetId] = useState<number | null>(null)
@@ -46,7 +47,6 @@ export default function OwnerBookingPage() {
   const [newPetOpen, setNewPetOpen] = useState(false)
   const [newSpeciesId, setNewSpeciesId] = useState<number | null>(null)
   const [newBreedId, setNewBreedId] = useState<number | null>(null)
-  const [bookedOn, setBookedOn] = useState('')
   const [slot, setSlot] = useState<AppointmentSlot>('MORNING_1')
   const [reason, setReason] = useState('')
 
@@ -64,8 +64,13 @@ export default function OwnerBookingPage() {
    * เก็บเป็นข้อความเปล่าเหมือนเดิม ซึ่งเป็นสิ่งที่กำลังแก้อยู่พอดี
    */
   const newPetReady = petNameText.trim().length > 0 && newSpeciesId !== null
+  const selectedSlotOcc = slots.data?.occupancy.find((o) => o.slot === slot)
+  const selectedSlotFull = selectedSlotOcc ? selectedSlotOcc.booked >= selectedSlotOcc.capacity : false
   const canSubmit =
-    date !== '' && (petId !== null || newPetReady) && !createPet.isPending
+    date !== '' &&
+    !selectedSlotFull &&
+    (petId !== null || newPetReady) &&
+    !createPet.isPending
 
   async function submit() {
     if (!canSubmit) return
@@ -276,21 +281,36 @@ export default function OwnerBookingPage() {
       <div className="flex flex-col gap-1.5">
         <Label>ช่วงเวลา</Label>
         <div className="grid grid-cols-2 gap-2">
-          {SLOTS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSlot(s)}
-              className={cn(
-                'rounded-md border px-3 py-2.5 text-sm',
-                slot === s
-                  ? 'border-primary bg-primary/10 font-medium'
-                  : 'border-input hover:bg-muted',
-              )}
-            >
-              {SLOT_LABEL[s]}
-            </button>
-          ))}
+          {SLOTS.map((s) => {
+            const occ = slots.data?.occupancy.find((o) => o.slot === s)
+            const reserved = occ ? occ.booked + occ.arrived : 0
+            const isFull = occ ? occ.booked >= occ.capacity : false
+
+            return (
+              <button
+                key={s}
+                type="button"
+                disabled={isFull}
+                onClick={() => setSlot(s)}
+                className={cn(
+                  'flex flex-col items-start gap-0.5 rounded-md border px-3 py-2.5 text-sm transition-colors',
+                  isFull
+                    ? 'cursor-not-allowed border-input bg-muted text-muted-foreground'
+                    : slot === s
+                      ? 'border-primary bg-primary/10 font-medium'
+                      : 'border-input hover:bg-muted',
+                )}
+              >
+                <span>{SLOT_LABEL[s]}</span>
+                {occ ? (
+                  <span className="text-xs text-muted-foreground">
+                    {isFull ? 'เต็มแล้ว' : `จองแล้ว ${reserved}/${occ.capacity}`}
+                    {occ.arrived > 0 ? ` · เช็กอินแล้ว ${occ.arrived} คน` : ''}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -307,6 +327,10 @@ export default function OwnerBookingPage() {
           placeholder="เช่น ฉีดวัคซีนประจำปี"
         />
       </div>
+
+      {selectedSlotFull ? (
+        <p className="text-sm text-destructive">ช่วงเวลานี้เต็มแล้ว กรุณาเลือกช่วงอื่น</p>
+      ) : null}
 
       <Button type="button" onClick={submit} disabled={!canSubmit || create.isPending}>
         {create.isPending ? 'กำลังจอง…' : 'ยืนยันการจอง'}

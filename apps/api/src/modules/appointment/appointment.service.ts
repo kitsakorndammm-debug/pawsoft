@@ -208,6 +208,46 @@ export async function listAppointmentDailyCounts(
   return rows.map((r) => ({ bookedOn: r.bookedOn, count: r._count._all }))
 }
 
+export type SlotOccupancy = {
+  slot: AppointmentSlot
+  capacity: number
+  /** จองไว้แต่ยังไม่มา — ตัวนี้แหละที่นับกับเพดานใน `requireSlotCapacity` */
+  booked: number
+  /** เช็กอินแล้ว — `checkIn` เปลี่ยนสถานะเป็น `ARRIVED` จึงไม่นับกับเพดานอีกต่อไป */
+  arrived: number
+}
+
+/**
+ * ความหนาแน่นของแต่ละช่วงเวลาในวันเดียว — ให้ลูกค้าเห็นก่อนเลือกช่วง และให้เคาน์เตอร์
+ * เห็นว่าช่วงไหนเริ่มแน่นแล้ว (ผู้ใช้ขอ 2026-10-27 เพื่อลดการกระจุกตัวของคนที่ตั้งใจ
+ * มาใกล้หมดช่วง)
+ *
+ * **แยก `booked` กับ `arrived` เพราะความหมายคนละเรื่อง** — `booked` คือจำนวนที่ยัง
+ * กันเพดานไว้อยู่ (`requireSlotCapacity` นับแค่ตัวนี้) ส่วน `arrived` คือมาถึงคลินิก
+ * จริงแล้ว พอเช็กอินแล้วใบจองจะไม่กินเพดานอีกต่อไป ถึงจะยังนับเป็น "จองไว้ของช่วงนี้"
+ * ในสายตาลูกค้าก็ตาม — หน้าจอจึงต้องบวกสองตัวนี้เองถ้าจะโชว์ "จองไว้ทั้งหมดกี่คน"
+ *
+ * **นับเฉพาะ `BOOKED`+`ARRIVED`** — ไม่รวม `PENDING` (ยังไม่ใช่คำมั่นของคลินิก)
+ * `CANCELLED` และ `NO_SHOW` เพราะไม่ใช่ความจุที่ถูกใช้ไปแล้วจริง
+ */
+export async function getSlotOccupancy(bookedOnRaw: string, tx?: Tx): Promise<SlotOccupancy[]> {
+  const bookedOn = cleanBookedOn(bookedOnRaw)
+  const at = tx ?? db
+
+  const rows = await at.appointment.groupBy({
+    by: ['slot', 'status'],
+    where: { bookedOn, status: { in: ['BOOKED', 'ARRIVED'] }, deletedAt: null },
+    _count: { _all: true },
+  })
+
+  return APPOINTMENT_SLOTS.map((slot) => ({
+    slot,
+    capacity: MAX_BOOKED_PER_SLOT,
+    booked: rows.find((r) => r.slot === slot && r.status === 'BOOKED')?._count._all ?? 0,
+    arrived: rows.find((r) => r.slot === slot && r.status === 'ARRIVED')?._count._all ?? 0,
+  }))
+}
+
 export type CreateAppointmentInput = {
   bookedOn: string
   slot: AppointmentSlot

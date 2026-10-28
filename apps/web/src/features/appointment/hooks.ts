@@ -36,11 +36,12 @@ export function useAppointments(
  * `new Date()` ในเบราว์เซอร์ใช้ timezone ของเครื่อง · เครื่องที่ตั้งเวลาผิด หรือคนที่
  * เปิดจากต่างประเทศ จะเห็นคิวของคนละวันกับที่คลินิกกำลังทำงานอยู่
  */
-export function useSlots() {
+/** `date` เป็น `YYYY-MM-DD` — ไม่ส่งมา BE ใช้วันนี้ให้เอง ความหนาแน่นเปลี่ยนบ่อยกว่าที่อื่น */
+export function useSlots(date?: string) {
   return useQuery({
-    queryKey: [...APPOINTMENT_ROOT, 'slots'],
-    queryFn: appointmentApi.slots,
-    staleTime: 60_000,
+    queryKey: [...APPOINTMENT_ROOT, 'slots', date ?? null],
+    queryFn: () => appointmentApi.slots(date),
+    staleTime: 30_000,
   })
 }
 
@@ -152,10 +153,10 @@ export function useCancelMyAppointment() {
  *
  * แยกจาก `useSlots` เพราะคนละเส้นและคนละสิทธิ์ — ดู `appointmentApi.mySlots`
  */
-export function useMySlots() {
+export function useMySlots(date?: string) {
   return useQuery({
-    queryKey: ['my', 'slots'],
-    queryFn: appointmentApi.mySlots,
-    staleTime: 60_000,
+    queryKey: ['my', 'slots', date ?? null],
+    queryFn: () => appointmentApi.mySlots(date),
+    staleTime: 30_000,
   })
 }

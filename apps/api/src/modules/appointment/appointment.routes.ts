@@ -30,6 +30,7 @@ import {
   createAppointment,
   deleteAppointment,
   findAppointment,
+  getSlotOccupancy,
   listAppointmentDailyCounts,
   listAppointments,
   markNoShow,
@@ -189,11 +190,29 @@ export const appointmentRoutes = new Elysia({ prefix: '/api/appointments' })
     },
   )
 
-  /** ช่วงเวลาที่จองได้ — หน้าจอวาดปุ่มจากลิสต์นี้ ไม่ใช่จากค่าที่ hardcode ไว้เอง */
-  .get('/slots', () => ok({ slots: APPOINTMENT_SLOTS, today: toDate(todayDate()) }), {
-    beforeHandle: guardReceptionRead,
-    detail: { tags: ['การจอง'], summary: 'ช่วงเวลาที่จองได้' },
-  })
+  /**
+   * ช่วงเวลาที่จองได้ — หน้าจอวาดปุ่มจากลิสต์นี้ ไม่ใช่จากค่าที่ hardcode ไว้เอง
+   *
+   * **`occupancy` เป็นของวันที่ `date` ส่งมา (ไม่ส่งมา = วันนี้)** — ให้เคาน์เตอร์เห็น
+   * ว่าช่วงไหนเริ่มแน่นแล้วตอนรับโทรศัพท์จอง (ผู้ใช้ขอ 2026-10-27)
+   */
+  .get(
+    '/slots',
+    async ({ query }) => {
+      const date = query.date ?? toDate(todayDate())
+
+      return ok({
+        slots: APPOINTMENT_SLOTS,
+        today: toDate(todayDate()),
+        occupancy: await getSlotOccupancy(date),
+      })
+    },
+    {
+      beforeHandle: guardReceptionRead,
+      query: t.Object({ date: t.Optional(t.String()) }),
+      detail: { tags: ['การจอง'], summary: 'ช่วงเวลาที่จองได้ พร้อมความหนาแน่น' },
+    },
+  )
 
   /**
    * จำนวนใบจองต่อวันในช่วง — ให้มุมมองสัปดาห์/เดือน/ปีของตารางจอง
@@ -487,9 +506,18 @@ export const myProfileRoutes = new Elysia({ prefix: '/api/my' })
     async (ctx) => {
       await getOwnerActor(ctx)
 
-      return ok({ slots: APPOINTMENT_SLOTS, today: toDate(todayDate()) })
+      const date = ctx.query.date ?? toDate(todayDate())
+
+      return ok({
+        slots: APPOINTMENT_SLOTS,
+        today: toDate(todayDate()),
+        occupancy: await getSlotOccupancy(date),
+      })
     },
-    { detail: { tags: ['ลูกค้า'], summary: 'ช่วงเวลาที่จองได้' } },
+    {
+      query: t.Object({ date: t.Optional(t.String()) }),
+      detail: { tags: ['ลูกค้า'], summary: 'ช่วงเวลาที่จองได้ พร้อมความหนาแน่น' },
+    },
   )
 
   /**
