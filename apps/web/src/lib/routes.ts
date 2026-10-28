@@ -35,6 +35,8 @@ export const ROUTE_APPOINTMENTS = '/appointments'
 export const ROUTE_OWNERS = '/owners'
 export const ROUTE_PETS = '/pets'
 export const ROUTE_BILLING = '/billing'
+/** สรุปยอดรายเดือน/รายปี — ของบัญชีเท่านั้น */
+export const ROUTE_BILLING_SUMMARY = '/billing/summary'
 export const ROUTE_DIAGRAMS = '/diagrams'
 
 // ---- ประวัติ — เปิดให้พนักงานทุกคนดู ไม่ต้องมีสิทธิ์เฉพาะ ----

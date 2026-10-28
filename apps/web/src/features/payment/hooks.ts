@@ -62,6 +62,14 @@ export function useInvoiceQr(id: number | null, enabled: boolean) {
   })
 }
 
+/** สรุปยอดบัญชีรายเดือน/รายปี — ของบัญชีเท่านั้น (`BILLING_VERIFY`) */
+export function useBillingSummary(input: { year: number; month: number | null }) {
+  return useQuery({
+    queryKey: [...INVOICE_ROOT, 'summary', input.year, input.month],
+    queryFn: () => invoiceApi.summary(input),
+  })
+}
+
 /** ตั้งค่าพร้อมเพย์ใน `.env` แล้วหรือยัง — เปลี่ยนได้เฉพาะตอน deploy จึงเก็บไว้นาน */
 export function usePromptPayStatus() {
   return useQuery({

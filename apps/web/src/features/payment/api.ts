@@ -108,6 +108,26 @@ export type Invoice = {
   payments: PaymentRow[]
 }
 
+export type BillingSummaryMethodRow = {
+  method: PaymentMethod
+  count: number
+  total: string
+}
+
+/**
+ * สรุปยอดบัญชี — เฉพาะใบ `VERIFIED` ตัดรอบด้วยเวลาที่เงินเข้าจริง ไม่ใช่เวลาที่ยืนยัน
+ *
+ * ใช้เทียบกับยอดที่เจ้าของได้รับจริงนอกระบบ (bank statement / เงินสดในมือ)
+ */
+export type BillingSummary = {
+  year: number
+  /** `null` = รวมทั้งปี */
+  month: number | null
+  totalCount: number
+  totalAmount: string
+  byMethod: BillingSummaryMethodRow[]
+}
+
 export type PromptPayQr = {
   /** ข้อความที่เอาไปวาด QR — ฝั่งนี้วาดเอง ไม่ได้รับรูปมา */
   payload: string
@@ -133,6 +153,14 @@ export const invoiceApi = {
   byVisit: (visitId: number) => api.get<Invoice | null>(`/api/invoices/by-visit/${visitId}`),
 
   qr: (id: number) => api.get<PromptPayQr>(`/api/invoices/${id}/qr`),
+
+  /** สรุปยอดรายเดือน/รายปี — `month: null` รวมทั้งปี · ประกาศก่อน `/:id` ที่ BE ด้วย */
+  summary: (input: { year: number; month: number | null }) => {
+    const search = new URLSearchParams({ year: String(input.year) })
+    if (input.month !== null) search.set('month', String(input.month))
+
+    return api.get<BillingSummary>(`/api/invoices/summary?${search.toString()}`)
+  },
 
   issue: (body: { visitId: number; discount: string | null; note: string | null }) =>
     api.post<Invoice>('/api/invoices', body),

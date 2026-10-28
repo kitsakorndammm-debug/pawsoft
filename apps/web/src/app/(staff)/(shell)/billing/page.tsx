@@ -1,6 +1,7 @@
 'use client'
 
-import { CheckCircle2, Pill, Receipt, Stethoscope, Undo2, UserRound, Wallet } from 'lucide-react'
+import { BarChart3, CheckCircle2, Pill, Receipt, Stethoscope, Undo2, UserRound, Wallet } from 'lucide-react'
+import Link from 'next/link'
 import { useQueryState } from 'nuqs'
 import { Suspense, useState } from 'react'
 import { toast } from 'sonner'
@@ -40,6 +41,7 @@ import { petPhotoUrl } from '@/features/pet/api'
 import { toErrorMessage } from '@/lib/api-client'
 import { formatDate } from '@/lib/format'
 import { BILLING_VERIFY } from '@/lib/permissions'
+import { ROUTE_BILLING_SUMMARY } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 
 /**
@@ -270,6 +272,13 @@ function BillingBoard() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {/* เฉพาะบัญชี — คนที่ต้องเอายอดไปเทียบกับที่ได้รับจริง */}
+          {canVerify ? (
+            <Button type="button" variant="outline" size="sm" nativeButton={false} render={<Link href={ROUTE_BILLING_SUMMARY} />}>
+              <BarChart3 className="size-3.5" />
+              สรุปยอด
+            </Button>
+          ) : null}
           <AppDatePicker
             value={date}
             onChange={(v) => void setDate(v ?? '')}

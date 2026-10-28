@@ -17,6 +17,7 @@ import { getOwnerActor, requireOwnerRow } from '../../kit/owner-actor.ts'
 import {
   addPayment,
   findInvoiceByVisit,
+  getBillingSummary,
   getInvoiceDetail,
   getMyInvoiceDetail,
   INVOICE_PAGE_SIZE,
@@ -51,6 +52,7 @@ import type { InvoiceStatus, PaymentMethod } from '../../../prisma/generated/cli
  */
 
 const LIST_QUERY_KEYS = new Set(['status', 'date', 'page', 'pageSize'])
+const SUMMARY_QUERY_KEYS = new Set(['year', 'month'])
 const ISSUE_FIELDS = new Set(['visitId', 'discount', 'note'])
 const PAYMENT_FIELDS = new Set(['method', 'amount', 'reference', 'promptpayRef', 'note'])
 const REJECT_FIELDS = new Set(['reason'])
@@ -204,6 +206,48 @@ export const invoiceRoutes = new Elysia({ prefix: '/api/invoices' })
         pageSize: t.Optional(t.String()),
       }),
       detail: { tags: ['การเงิน'], summary: 'ดูรายการใบเสร็จ' },
+    },
+  )
+
+  /**
+   * สรุปยอดรายเดือน/รายปี — **ของบัญชีเท่านั้น** (ผู้ใช้ขอ 2026-10-29: "ให้มันตรงกับ
+   * ยอดที่เจ้าของได้รับ ... ต้องให้บัญชีจัดการแก้ปัญหา")
+   *
+   * ตัดรอบด้วยเวลาที่เงินเข้าจริง ไม่ใช่เวลาที่ยืนยัน — ดู `getBillingSummary`
+   *
+   * **ประกาศก่อน `/:id`** — ไม่งั้น `summary` จะถูกอ่านเป็นเลขใบ (รูปแบบเดียวกับ
+   * `/by-visit/:visitId` ด้านล่าง)
+   */
+  .get(
+    '/summary',
+    async ({ query, request }) => {
+      refuseUnknownQuery(request.url, SUMMARY_QUERY_KEYS)
+
+      const year = parseCount(query.year, 'year')
+      if (year === undefined) throw invalid('ระบุปี', { field: 'year' })
+      const month = parseCount(query.month, 'month')
+
+      const result = await getBillingSummary({ year, month })
+
+      return ok({
+        year: result.year,
+        month: result.month,
+        totalCount: result.totalCount,
+        totalAmount: result.totalAmount,
+        byMethod: result.byMethod.map((m) => ({
+          method: m.method,
+          count: m.count,
+          total: m.total,
+        })),
+      })
+    },
+    {
+      beforeHandle: guardBillingVerify,
+      query: t.Object({
+        year: t.Optional(t.String()),
+        month: t.Optional(t.String()),
+      }),
+      detail: { tags: ['การเงิน'], summary: 'สรุปยอดบัญชีรายเดือน/รายปี' },
     },
   )
 

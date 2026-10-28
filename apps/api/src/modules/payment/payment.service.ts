@@ -924,6 +924,100 @@ export async function listInvoices(
   return { rows, page, pageSize, total }
 }
 
+export type BillingSummaryInput = {
+  year: number
+  /** ไม่ระบุ = รวมทั้งปี */
+  month?: number | undefined
+}
+
+export type BillingSummaryMethodRow = {
+  method: PaymentMethod
+  count: number
+  total: string
+}
+
+export type BillingSummaryResult = {
+  year: number
+  month: number | null
+  totalCount: number
+  totalAmount: string
+  byMethod: BillingSummaryMethodRow[]
+}
+
+/**
+ * สรุปยอดบัญชี — **ไว้ให้บัญชีเอาไปเทียบกับยอดที่เข้าจริง** (ผู้ใช้ขอ 2026-10-29:
+ * "ให้มันตรงกับยอดที่เจ้าของได้รับ")
+ *
+ * ระบบแค่สรุปยอด ไม่เทียบ/ไม่เตือนอะไรเอง — บัญชีเอาตัวเลขนี้ไปเทียบกับ bank
+ * statement (พร้อมเพย์/โอน) หรือเงินสดในมือ (เงินสด) ด้วยตัวเองนอกระบบ
+ *
+ * **ตัดรอบด้วย `payment.receivedAt` ไม่ใช่ `invoice.verifiedAt`** — เงินเข้าจริง
+ * เดือนไหนต้องนับเดือนนั้น ต่อให้บัญชีมากดยืนยันข้ามเดือนไปแล้วก็ตาม
+ *
+ * **นับเฉพาะใบ `VERIFIED`** — ใบที่ยังรอตรวจหรือถูกตีกลับยังไม่ใช่เงินที่ยืนยันว่า
+ * เข้าจริง
+ */
+export async function getBillingSummary(
+  input: BillingSummaryInput,
+  tx?: Tx,
+): Promise<BillingSummaryResult> {
+  const at = tx ?? db
+
+  if (!Number.isInteger(input.year) || input.year < 2000 || input.year > 2100) {
+    throw invalid('ปีไม่ถูกต้อง', { field: 'year', value: input.year })
+  }
+  if (
+    input.month !== undefined &&
+    (!Number.isInteger(input.month) || input.month < 1 || input.month > 12)
+  ) {
+    throw invalid('เดือนต้องอยู่ระหว่าง 1-12', { field: 'month', value: input.month })
+  }
+
+  // ขอบเขตตามเวลาไทย — เหตุผลเดียวกับ `listInvoices`
+  const { month, year } = input
+  const start =
+    month !== undefined
+      ? new Date(`${year}-${String(month).padStart(2, '0')}-01T00:00:00+07:00`)
+      : new Date(`${year}-01-01T00:00:00+07:00`)
+  const end =
+    month !== undefined
+      ? month === 12
+        ? new Date(`${year + 1}-01-01T00:00:00+07:00`)
+        : new Date(`${year}-${String(month + 1).padStart(2, '0')}-01T00:00:00+07:00`)
+      : new Date(`${year + 1}-01-01T00:00:00+07:00`)
+
+  const payments = await at.payment.findMany({
+    where: {
+      receivedAt: { gte: start, lt: end },
+      invoice: { status: 'VERIFIED', deletedAt: null },
+    },
+    select: { method: true, amount: true },
+  })
+
+  const byMethod = new Map<PaymentMethod, { count: number; total: Prisma.Decimal }>()
+  let totalAmount = new Prisma.Decimal(0)
+
+  for (const p of payments) {
+    const bucket = byMethod.get(p.method) ?? { count: 0, total: new Prisma.Decimal(0) }
+    bucket.count += 1
+    bucket.total = bucket.total.add(p.amount)
+    byMethod.set(p.method, bucket)
+    totalAmount = totalAmount.add(p.amount)
+  }
+
+  return {
+    year: input.year,
+    month: input.month ?? null,
+    totalCount: payments.length,
+    totalAmount: totalAmount.toFixed(2),
+    byMethod: [...byMethod.entries()].map(([method, v]) => ({
+      method,
+      count: v.count,
+      total: v.total.toFixed(2),
+    })),
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * ฝั่งลูกค้า — ดูและจ่ายใบของตัวเอง
  *
